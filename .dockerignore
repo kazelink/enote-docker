@@ -1,0 +1,9 @@
+node_modules
+data
+.git
+.gemini
+*.log
+*.md
+LICENSE
+.gitignore
+.gitattributes

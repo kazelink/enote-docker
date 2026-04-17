@@ -1,0 +1,15 @@
+{
+  "name": "enote",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.11.1",
+    "better-sqlite3": "^11.5.0",
+    "hono": "^4.4.0",
+    "node-cron": "^3.0.3"
+  }
+}

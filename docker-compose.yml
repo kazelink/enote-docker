@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  enote:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: op09090/enote:latest
+    container_name: enote
+    ports:
+      - "3000:3000"
+    volumes:
+      - data:/app/data
+    environment:
+      # !! CHANGE THESE IN .env FILE !!
+      - APP_PASSWORD=${APP_PASSWORD}
+      - JWT_SECRET=${JWT_SECRET}
+      - DB_PATH=/app/data/enote.db
+      - STORAGE_PATH=/app/data/storage
+    restart: unless-stopped
+
+volumes:
+  data:
+    driver: local
