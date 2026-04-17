@@ -2,6 +2,9 @@
 
 A lightweight note-taking application containerized for easy deployment.
 
+👉 **[Try the Live Demo](https://op09090-enote-test.hf.space/app.html)** Password: LINUX
+*(Note: The demo resets periodically, please do not store sensitive information.)*
+
 ## Quick Start (Docker Compose)
 
 Create a `docker-compose.yml` file and run `docker compose up -d`.
