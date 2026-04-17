@@ -56,8 +56,11 @@ export const Editor = {
     _toolbarRaf: null,
     _imgToolbarRaf: null,
     _beforeUnloadHandler: null,
-    _categoryOptionsLoaded: false,
-    _subcategoryOptionsCache: new Map(),
+    _metaSuggestMenu: null,
+    _metaSuggestField: '',
+    _metaSuggestOptions: [],
+    _metaSuggestActiveIndex: -1,
+    _metaSuggestHideTimer: null,
     _openMode: '',
     _hiddenInlineNodes: [],
     _metaCollapsed: false,
@@ -68,7 +71,7 @@ export const Editor = {
             'img-input', 'vid-input', 'btn-img', 'btn-vid', 'btn-hr', 'btn-color',
             'color-dropdown', 'img-toolbar',
             'n-title', 'n-category', 'n-subcategory', 'n-tags', 'n-date',
-            'note-date-pill', 'note-date-text', 'category-options', 'subcategory-options',
+            'note-date-pill', 'note-date-text',
             'btn-meta-toggle', 'note-meta-bar'
         ];
 
@@ -173,9 +176,6 @@ export const Editor = {
             nSubcategory.value = savedNote.subcategory;
             if (nTags) nTags.value = savedNote.tags.join(', ');
             this._updateMetaStatus(savedNote.updatedAt);
-
-            this._categoryOptionsLoaded = false;
-            this._subcategoryOptionsCache.clear();
             window.App?._invalidateSidebarCaches?.();
             window.App?.primeSavedNote?.(savedNote);
             State.originalSnapshot = this.snapshot();
@@ -584,9 +584,27 @@ export const Editor = {
 
         if (nCategory) {
             nCategory.addEventListener('input', () => {
-                this._loadSubcategoryOptions(nCategory.value, this.el.nSubcategory?.value || '');
+                const currentSubcategory = String(this.el.nSubcategory?.value || '').trim();
+                const subcategories = this._getSubcategoryValues(nCategory.value);
+                if (this.el.nSubcategory && currentSubcategory && !subcategories.includes(currentSubcategory)) {
+                    this.el.nSubcategory.value = '';
+                    this._triggerInput?.();
+                }
+                this._refreshMetaSuggestions('category', { filter: true });
+                if (this._metaSuggestField === 'subcategory') {
+                    this._refreshMetaSuggestions('subcategory');
+                }
             });
         }
+
+        if (nSubcategory) {
+            nSubcategory.addEventListener('input', () => {
+                this._refreshMetaSuggestions('subcategory', { filter: true });
+            });
+        }
+
+        this._bindMetaSuggestionInput(nCategory, 'category');
+        this._bindMetaSuggestionInput(nSubcategory, 'subcategory');
 
         if (noteDatePill && nDate) {
             noteDatePill.addEventListener('click', () => {
@@ -612,8 +630,31 @@ export const Editor = {
         }
     },
 
+    _bindMetaSuggestionInput(inputEl, field) {
+        if (!inputEl) return;
+
+        inputEl.addEventListener('focus', () => {
+            this._cancelHideMetaSuggestions();
+            this._refreshMetaSuggestions(field);
+        });
+
+        inputEl.addEventListener('click', () => {
+            this._cancelHideMetaSuggestions();
+            this._refreshMetaSuggestions(field);
+        });
+
+        inputEl.addEventListener('keydown', (event) => {
+            this._handleMetaSuggestKeydown(event, field);
+        });
+
+        inputEl.addEventListener('blur', () => {
+            this._scheduleHideMetaSuggestions(field);
+        });
+    },
+
     _setMetaCollapsed(collapsed) {
         this._metaCollapsed = !!collapsed;
+        if (this._metaCollapsed) this._hideMetaSuggestions();
 
         if (this.el.noteMetaBar) {
             this.el.noteMetaBar.classList.toggle('collapsed', this._metaCollapsed);
@@ -641,61 +682,266 @@ export const Editor = {
         attachUpload(vidInput, 'video');
     },
 
-    _populateDatalist(listEl, values) {
-        if (!listEl) return;
-        listEl.innerHTML = (values || [])
-            .filter(Boolean)
-            .map((value) => `<option value="${String(value)
-                .replace(/&/g, '&amp;')
-                .replace(/"/g, '&quot;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')}"></option>`)
-            .join('');
+    _escapeMetaOption(value) {
+        return String(value || '')
+            .replace(/&/g, '&amp;')
+            .replace(/"/g, '&quot;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
     },
 
-    _loadCategoryOptions() {
-        if (this._categoryOptionsLoaded) return;
+    _getFolderTree() {
         const tree = window.App?._folderTreeCache;
-        if (!Array.isArray(tree)) return;
-        const categories = tree
+        return Array.isArray(tree) ? tree : [];
+    },
+
+    _getCategoryValues() {
+        return [...new Set(this._getFolderTree()
             .map((row) => String(row?.category || '').trim())
-            .filter(Boolean);
-        this._populateDatalist(this.el.categoryOptions, categories);
-        this._categoryOptionsLoaded = true;
+            .filter(Boolean))];
     },
 
-    _primeOptionLists(sessionId, category, preferred = '') {
-        this._loadCategoryOptions();
-        if (sessionId !== this._sessionId) return;
-        this._loadSubcategoryOptions(category, preferred);
-    },
-
-    _loadSubcategoryOptions(category, preferred = '') {
+    _getSubcategoryValues(category) {
         const safeCategory = String(category || '').trim();
-        if (!safeCategory) {
-            this._populateDatalist(this.el.subcategoryOptions, []);
+        if (!safeCategory) return [];
+
+        const match = this._getFolderTree().find((row) => String(row?.category || '').trim() === safeCategory);
+        return [...new Set((match?.subfolders || [])
+            .map((sub) => String(sub?.subcategory || '').trim())
+            .filter(Boolean))];
+    },
+
+    _sortMetaSuggestionValues(values, query = '') {
+        const normalizedValues = [...new Set((values || []).map((value) => String(value || '').trim()).filter(Boolean))];
+        const needle = String(query || '').trim().toLowerCase();
+        if (!needle) return normalizedValues;
+
+        const matched = [];
+        const rest = [];
+
+        normalizedValues.forEach((value) => {
+            if (value.toLowerCase().includes(needle)) matched.push(value);
+            else rest.push(value);
+        });
+
+        return [...matched, ...rest];
+    },
+
+    _getMetaSuggestInput(field) {
+        if (field === 'category') return this.el.nCategory || null;
+        if (field === 'subcategory') return this.el.nSubcategory || null;
+        return null;
+    },
+
+    _ensureMetaSuggestMenu() {
+        if (this._metaSuggestMenu) return this._metaSuggestMenu;
+
+        const menu = document.createElement('div');
+        menu.className = 'meta-suggest-menu';
+        menu.addEventListener('mousedown', (event) => {
+            event.preventDefault();
+            const item = event.target.closest('.meta-suggest-item');
+            if (!item) return;
+            const index = Number.parseInt(item.dataset.index || '', 10);
+            if (Number.isInteger(index)) {
+                this._applyMetaSuggestion(index);
+            }
+        });
+
+        document.body.appendChild(menu);
+        this._metaSuggestMenu = menu;
+
+        document.addEventListener('mousedown', (event) => {
+            const activeInput = this._getMetaSuggestInput(this._metaSuggestField);
+            if (menu.contains(event.target) || event.target === activeInput) return;
+            this._hideMetaSuggestions();
+        });
+
+        window.addEventListener('resize', () => this._repositionMetaSuggestions());
+        window.addEventListener('scroll', () => this._repositionMetaSuggestions(), true);
+        return menu;
+    },
+
+    _renderMetaSuggestions() {
+        const menu = this._ensureMetaSuggestMenu();
+        menu.innerHTML = this._metaSuggestOptions.map((value, index) => `
+            <button type="button" class="meta-suggest-item${index === this._metaSuggestActiveIndex ? ' active' : ''}" data-index="${index}">
+                ${this._escapeMetaOption(value)}
+            </button>
+        `).join('');
+    },
+
+    _repositionMetaSuggestions() {
+        if (!this._metaSuggestField || !this._metaSuggestMenu?.classList.contains('show')) return;
+
+        const inputEl = this._getMetaSuggestInput(this._metaSuggestField);
+        if (!inputEl) {
+            this._hideMetaSuggestions();
             return;
         }
 
-        const cached = this._subcategoryOptionsCache.get(safeCategory);
-        if (cached) {
-            if (String(this.el.nCategory?.value || '').trim() === safeCategory) {
-                this._populateDatalist(this.el.subcategoryOptions, cached);
-                if (preferred && this.el.nSubcategory) this.el.nSubcategory.value = preferred;
+        const rect = inputEl.getBoundingClientRect();
+        if (rect.width <= 0 || rect.height <= 0) {
+            this._hideMetaSuggestions();
+            return;
+        }
+
+        const menu = this._metaSuggestMenu;
+        const preferredHeight = 220;
+        const gap = 6;
+        const spaceBelow = window.innerHeight - rect.bottom - 12;
+        const spaceAbove = rect.top - 12;
+        const placeAbove = spaceBelow < 140 && spaceAbove > spaceBelow;
+        const maxHeight = Math.max(120, Math.min(preferredHeight, placeAbove ? spaceAbove - gap : spaceBelow - gap));
+        const top = placeAbove
+            ? Math.max(12, rect.top - maxHeight - gap)
+            : rect.bottom + gap;
+
+        menu.style.left = `${Math.max(12, rect.left)}px`;
+        menu.style.top = `${top}px`;
+        menu.style.width = `${rect.width}px`;
+        menu.style.maxHeight = `${maxHeight}px`;
+    },
+
+    _getMetaSuggestInitialIndex(field, values) {
+        const inputEl = this._getMetaSuggestInput(field);
+        const currentValue = String(inputEl?.value || '').trim();
+        if (!currentValue) return 0;
+
+        const currentIndex = values.findIndex((value) => String(value || '').trim() === currentValue);
+        return currentIndex >= 0 ? currentIndex : 0;
+    },
+
+    _showMetaSuggestions(field, values) {
+        if (!Array.isArray(values) || values.length === 0) {
+            this._hideMetaSuggestions(field);
+            return;
+        }
+
+        this._cancelHideMetaSuggestions();
+        this._metaSuggestField = field;
+        this._metaSuggestOptions = values;
+        this._metaSuggestActiveIndex = this._getMetaSuggestInitialIndex(field, values);
+        this._renderMetaSuggestions();
+        this._metaSuggestMenu.classList.add('show');
+        this._repositionMetaSuggestions();
+        const activeEl = this._metaSuggestMenu?.querySelector('.meta-suggest-item.active');
+        activeEl?.scrollIntoView({ block: 'nearest' });
+    },
+
+    _hideMetaSuggestions(field = '') {
+        if (field && this._metaSuggestField && field !== this._metaSuggestField) return;
+        this._cancelHideMetaSuggestions();
+        this._metaSuggestField = '';
+        this._metaSuggestOptions = [];
+        this._metaSuggestActiveIndex = -1;
+        if (this._metaSuggestMenu) {
+            this._metaSuggestMenu.classList.remove('show');
+            this._metaSuggestMenu.innerHTML = '';
+        }
+    },
+
+    _scheduleHideMetaSuggestions(field) {
+        this._cancelHideMetaSuggestions();
+        this._metaSuggestHideTimer = setTimeout(() => {
+            this._hideMetaSuggestions(field);
+        }, 120);
+    },
+
+    _cancelHideMetaSuggestions() {
+        if (this._metaSuggestHideTimer) {
+            clearTimeout(this._metaSuggestHideTimer);
+            this._metaSuggestHideTimer = null;
+        }
+    },
+
+    _refreshMetaSuggestions(field, { filter = false } = {}) {
+        const inputEl = this._getMetaSuggestInput(field);
+        if (!inputEl) return;
+
+        const values = field === 'category'
+            ? this._getCategoryValues()
+            : this._getSubcategoryValues(this.el.nCategory?.value || '');
+        if (!values.length) {
+            this._hideMetaSuggestions(field);
+            return;
+        }
+
+        const suggestions = this._sortMetaSuggestionValues(values, filter ? inputEl.value : '');
+        this._showMetaSuggestions(field, suggestions);
+    },
+
+    _setMetaSuggestActiveIndex(index) {
+        if (!this._metaSuggestOptions.length) return;
+        const maxIndex = this._metaSuggestOptions.length - 1;
+        const nextIndex = Math.max(0, Math.min(maxIndex, index));
+        this._metaSuggestActiveIndex = nextIndex;
+        this._renderMetaSuggestions();
+        const activeEl = this._metaSuggestMenu?.querySelector('.meta-suggest-item.active');
+        activeEl?.scrollIntoView({ block: 'nearest' });
+    },
+
+    _applyMetaSuggestion(index) {
+        const value = String(this._metaSuggestOptions[index] || '').trim();
+        if (!value) return;
+
+        if (this._metaSuggestField === 'category') {
+            const currentSubcategory = String(this.el.nSubcategory?.value || '').trim();
+            const subcategories = this._getSubcategoryValues(value);
+            const nextSubcategory = subcategories.includes(currentSubcategory) ? currentSubcategory : '';
+
+            if (this.el.nCategory) this.el.nCategory.value = value;
+            if (this.el.nSubcategory) this.el.nSubcategory.value = nextSubcategory;
+            this._triggerInput?.();
+            this._hideMetaSuggestions();
+
+            if (this.el.nSubcategory) {
+                this.el.nSubcategory.focus({ preventScroll: true });
+                this._refreshMetaSuggestions('subcategory');
             }
             return;
         }
 
-        const tree = window.App?._folderTreeCache;
-        if (!Array.isArray(tree)) return;
-        const match = tree.find((row) => String(row?.category || '').trim() === safeCategory);
-        const subcategories = (match?.subfolders || [])
-            .map((sub) => String(sub?.subcategory || '').trim())
-            .filter(Boolean);
-        this._subcategoryOptionsCache.set(safeCategory, subcategories);
-        if (String(this.el.nCategory?.value || '').trim() === safeCategory) {
-            this._populateDatalist(this.el.subcategoryOptions, subcategories);
-            if (preferred && this.el.nSubcategory) this.el.nSubcategory.value = preferred;
+        if (this._metaSuggestField === 'subcategory' && this.el.nSubcategory) {
+            this.el.nSubcategory.value = value;
+            this._triggerInput?.();
+            this._hideMetaSuggestions();
+            this.el.nSubcategory.focus({ preventScroll: true });
+        }
+    },
+
+    _handleMetaSuggestKeydown(event, field) {
+        const isActiveField = this._metaSuggestField === field && this._metaSuggestOptions.length > 0;
+
+        if (!isActiveField && event.key === 'ArrowDown') {
+            this._refreshMetaSuggestions(field);
+            if (this._metaSuggestOptions.length > 0) event.preventDefault();
+            return;
+        }
+
+        if (!isActiveField) return;
+
+        if (event.key === 'ArrowDown') {
+            event.preventDefault();
+            this._setMetaSuggestActiveIndex(this._metaSuggestActiveIndex + 1);
+            return;
+        }
+
+        if (event.key === 'ArrowUp') {
+            event.preventDefault();
+            this._setMetaSuggestActiveIndex(this._metaSuggestActiveIndex - 1);
+            return;
+        }
+
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            this._applyMetaSuggestion(this._metaSuggestActiveIndex);
+            return;
+        }
+
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            this._hideMetaSuggestions(field);
         }
     },
 
@@ -843,7 +1089,6 @@ export const Editor = {
         }
 
         State.originalSnapshot = this.snapshot();
-        this._primeOptionLists(sessionId, nCategory.value, nSubcategory.value);
 
         requestAnimationFrame(() => {
             if (sessionId !== this._sessionId) return;
@@ -958,6 +1203,7 @@ export const Editor = {
         if (this.el.nCategory) this.el.nCategory.value = '';
         if (this.el.nSubcategory) this.el.nSubcategory.value = '';
         if (this.el.nTags) this.el.nTags.value = '';
+        this._hideMetaSuggestions();
         this._setMetaCollapsed(false);
         this._updateMetaStatus('');
 
