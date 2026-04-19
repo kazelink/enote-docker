@@ -5,6 +5,12 @@ A lightweight note-taking application containerized for easy deployment.
 👉 **[Try the Live Demo](https://op09090-enote-test.hf.space/app.html)**
 Password: LINUX
 
+## Preview
+
+| Website View | Mobile View |
+| :---: | :---: |
+| ![Website](assets/screenshots/website.PNG) | ![Mobile](assets/screenshots/mobile.PNG) |
+
 *(Note: The demo resets periodically, please do not store sensitive information.)*
 
 ## Quick Start (Docker Compose)
