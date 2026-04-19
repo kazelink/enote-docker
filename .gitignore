@@ -3,16 +3,7 @@ node_modules/
 
 # Local data & secrets
 data/
-.env*
+.env
 
-# IDE & Tooling
-.gemini/
-.vscode/
-
-# Logs & temp
+# Logs
 *.log
-scratch/
-
-# OS specific
-.DS_Store
-Thumbs.db

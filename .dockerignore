@@ -1,19 +1,17 @@
-# Git & IDEs
+# Internal Git Metadata
 .git
 .gitignore
 .gitattributes
-.gemini
-.env*
-.vscode
 
 # Dependencies & Local Data
 node_modules
+.env
 data
 *.log
 
-# Build & Documentation Artifacts
+# Build & Documentation Artifacts (Not needed at runtime)
 Dockerfile
 docker-compose.yml
 README.md
 LICENSE
-scratch
+assets/screenshots
