@@ -3,7 +3,7 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono } from 'hono';
 import cron from 'node-cron';
 import app from './index.js';
-import { scheduledBackup } from './lib/scheduled.js';
+import { scheduledGc } from './lib/scheduled.js';
 import { ensureSchema } from './lib/schema.js';
 import { db } from './lib/core.js';
 
@@ -12,8 +12,8 @@ async function startup() {
     
     // Schedule cron job
     cron.schedule('0 2 * * *', () => {
-        console.log('Running scheduled backup...');
-        scheduledBackup().catch(console.error);
+        console.log('Running scheduled garbage collection...');
+        scheduledGc().catch(console.error);
     });
 
     const mainApp = new Hono();

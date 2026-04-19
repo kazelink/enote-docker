@@ -1,5 +1,5 @@
 const DAY_MS = 24 * 60 * 60 * 1000;
-import { extractMediaKeys, parseStoredTags, toBackupEntry, toBackupFolder } from './utils.js';
+import { extractMediaKeys, toBackupEntry, toBackupFolder } from './utils.js';
 
 function uploadedAtMs(obj) {
     const ts = obj?.uploaded instanceof Date ? obj.uploaded.getTime() : Date.parse(String(obj?.uploaded || ''));
@@ -20,69 +20,15 @@ async function listAllObjects(bucket, prefix) {
     return objects;
 }
 
-function parseBackupDateMsFromKey(key) {
-    const m = String(key || '').match(/^backups\/(\d{4})-(\d{2})-(\d{2})\.json$/);
-    if (!m) return 0;
-    const ts = Date.parse(`${m[1]}-${m[2]}-${m[3]}T00:00:00Z`);
-    return Number.isFinite(ts) ? ts : 0;
-}
-
-const MAX_BACKUPS_TO_KEEP = 5;
-
-function selectBackupKeysToDelete(objects) {
-    if (!Array.isArray(objects) || objects.length <= MAX_BACKUPS_TO_KEEP) return [];
-
-    const backups = objects
-        .map((obj) => ({
-            key: String(obj?.key || ''),
-            ts: parseBackupDateMsFromKey(obj?.key)
-        }))
-        .filter((b) => b.ts > 0)
-        .sort((a, b) => b.ts - a.ts);
-
-    return backups.slice(MAX_BACKUPS_TO_KEEP).map((b) => b.key);
-}
-
-function withBackupObject(objects, key) {
-    const list = Array.isArray(objects) ? objects : [];
-    return list.some((obj) => String(obj?.key || '') === key)
-        ? list
-        : [...list, { key }];
-}
-
 import { db, bucket } from './core.js';
 
-export async function scheduledBackup() {
+export async function scheduledGc() {
     try {
-        const [notesRes, foldersRes, backupObjects, tmpObjects, allMediaObjects] = await Promise.all([
-            db.prepare('SELECT * FROM notes ORDER BY updated_at DESC').all(),
-            db.prepare('SELECT * FROM folders ORDER BY lower(category) ASC, lower(subcategory) ASC').all(),
-            listAllObjects(bucket, 'backups/'),
+        const [notesRes, tmpObjects, allMediaObjects] = await Promise.all([
+            db.prepare('SELECT content FROM notes').all(),
             listAllObjects(bucket, 'tmp/'),
             listAllObjects(bucket, '')
         ]);
-
-        const notes = (notesRes.results || []).map(toBackupEntry);
-        const folders = (foldersRes.results || []).map(toBackupFolder);
-        const backupData = JSON.stringify({
-            timestamp: new Date().toISOString(),
-            count: notes.length,
-            folderCount: folders.length,
-            folders,
-            notes
-        });
-
-        const dateStr = new Date().toISOString().split('T')[0];
-        const fileName = `backups/${dateStr}.json`;
-        await bucket.put(fileName, backupData, {
-            httpMetadata: { contentType: 'application/json' }
-        });
-
-        const toDelete = selectBackupKeysToDelete(withBackupObject(backupObjects, fileName));
-        if (toDelete.length > 0) {
-            console.log(`Backup retention: deleting ${toDelete.length} old backups.`);
-            await Promise.allSettled(toDelete.map((key) => bucket.delete(key)));
-        }
 
         const cutoff = Date.now() - DAY_MS;
         const staleTmp = tmpObjects.filter((obj) => {
@@ -104,7 +50,8 @@ export async function scheduledBackup() {
         const toGc = allMediaObjects
             .map((obj) => obj.key)
             .filter((key) => {
-                if (key.startsWith('backups/') || key.startsWith('tmp/')) return false;
+                if (key.startsWith('tmp/')) return false;
+                if (key.startsWith('backups/')) return false; // Exclude user's manual backups if they exist in bucket
                 return !allActiveKeys.has(key);
             });
 
@@ -113,6 +60,6 @@ export async function scheduledBackup() {
             await Promise.allSettled(toGc.map((key) => bucket.delete(key)));
         }
     } catch (e) {
-        console.error('Scheduled backup failed:', e);
+        console.error('Scheduled GC failed:', e);
     }
 }
