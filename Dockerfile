@@ -14,7 +14,6 @@ FROM node:20-alpine
 WORKDIR /app
 
 RUN apk add --no-cache su-exec && \
-    deluser node && \
     addgroup -g 1000 -S enote && \
     adduser -u 1000 -S enote -G enote && \
     mkdir -p /app/data
