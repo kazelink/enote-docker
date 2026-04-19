@@ -1,5 +1,5 @@
 const DAY_MS = 24 * 60 * 60 * 1000;
-import { extractMediaKeys, toBackupEntry, toBackupFolder } from './utils.js';
+import { extractMediaKeys } from './utils.js';
 
 function uploadedAtMs(obj) {
     const ts = obj?.uploaded instanceof Date ? obj.uploaded.getTime() : Date.parse(String(obj?.uploaded || ''));

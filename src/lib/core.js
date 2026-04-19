@@ -162,30 +162,37 @@ class LocalStorage {
         };
     }
 
-    async list({ prefix = '', cursor } = {}) {
-        const searchDir = prefix
-            ? path.join(this.baseDir, prefix.replace(/\.\./g, ''))
-            : this.baseDir;
+    async list({ prefix = '' } = {}) {
+        const objects = [];
+        const basePrefix = prefix.replace(/\.\./g, '').replace(/^\//, '');
+        const searchDir = path.join(this.baseDir, basePrefix);
 
         if (!fs.existsSync(searchDir)) {
             return { objects: [], truncated: false };
         }
 
-        const objects = [];
-        const entries = fs.readdirSync(searchDir);
-        for (const entry of entries) {
-            if (entry.endsWith('.meta.json')) continue;
-            const fullPath = path.join(searchDir, entry);
-            const stat = fs.statSync(fullPath);
-            if (stat.isFile()) {
-                objects.push({
-                    key: prefix + entry,
-                    uploaded: stat.mtime,
-                    size: stat.size
-                });
-            }
-        }
+        const walk = (dir, currentPrefix) => {
+            const entries = fs.readdirSync(dir);
+            for (const entry of entries) {
+                if (entry.endsWith('.meta.json')) continue;
+                const fullPath = path.join(dir, entry);
+                const stat = fs.statSync(fullPath);
+                
+                const relativeKey = currentPrefix ? `${currentPrefix}${entry}` : entry;
 
+                if (stat.isDirectory()) {
+                    walk(fullPath, `${relativeKey}/`);
+                } else if (stat.isFile()) {
+                    objects.push({
+                        key: basePrefix ? path.join(basePrefix, relativeKey).replace(/\\/g, '/') : relativeKey.replace(/\\/g, '/'),
+                        uploaded: stat.mtime,
+                        size: stat.size
+                    });
+                }
+            }
+        };
+
+        walk(searchDir, '');
         return { objects, truncated: false };
     }
 
