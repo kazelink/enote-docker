@@ -1,5 +1,18 @@
-node_modules
-data
+# Dependencies
+node_modules/
+
+# Local data & secrets
+data/
 .env*
-.gemini
+
+# IDE & Tooling
+.gemini/
+.vscode/
+
+# Logs & temp
 *.log
+scratch/
+
+# OS specific
+.DS_Store
+Thumbs.db
