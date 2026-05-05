@@ -2662,18 +2662,10 @@ input[type=number] {
 .htmx-request .auth-btn svg,
 .auth-btn.loading svg,
 .spin {
-    animation: auth-spin 0.8s linear infinite;
+    animation: spin 0.8s linear infinite;
 }
 
-@keyframes auth-spin {
-    from {
-        transform: rotate(0deg);
-    }
 
-    to {
-        transform: rotate(360deg);
-    }
-}
 
 #auth-messages {
     min-height: 30px;
@@ -3049,40 +3041,5 @@ body.swal2-height-auto {
 }
 
 /* ==========================================================================
-   13. Tree Context Menu
+   13. Tree Context Menu — merged into Section 6
    ========================================================================== */
-.tree-context-menu {
-    position: fixed;
-    z-index: 1200;
-    display: none;
-    flex-direction: column;
-    min-width: 210px;
-    padding: 6px;
-    background: rgba(255, 255, 255, 0.98);
-    border: 1px solid rgba(203, 213, 225, 0.9);
-    border-radius: 12px;
-    box-shadow: 0 16px 30px rgba(15, 23, 42, 0.14);
-}
-
-.tree-context-btn {
-    width: 100%;
-    border: none;
-    background: transparent;
-    border-radius: 8px;
-    padding: 10px 12px;
-    text-align: left;
-    font-family: 'Montserrat', sans-serif !important;
-    font-size: 11px;
-    font-weight: 800;
-    letter-spacing: 0.7px;
-    color: var(--txt-main);
-    cursor: pointer;
-    transition: background-color 0.18s ease, color 0.18s ease;
-    display: flex;
-    align-items: center;
-}
-
-.tree-context-btn:hover {
-    background: rgba(var(--m-blu-rgb), 0.1);
-    color: var(--m-blu);
-}
