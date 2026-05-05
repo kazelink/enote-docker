@@ -343,13 +343,12 @@ const App = {
     this._syncFolderPanelControls();
   },
 
-  _primeCurrentNote(note) {
+  primeSavedNote(note) {
     if (!note?.id) return null;
     this._currentNote = { ...note, id: String(note.id || ""), title: String(note.title || ""), category: String(note.category || ""), subcategory: String(note.subcategory || ""), content: typeof note.content === "string" ? note.content : "", tags: Array.isArray(note.tags) ? note.tags.map(t => String(t || "").trim()).filter(Boolean) : [] };
     this._notePathHint = { category: this._currentNote.category, subcategory: this._currentNote.subcategory };
     return this._currentNote;
   },
-  primeSavedNote(note) { return this._primeCurrentNote(note); },
 
   async _loadNote() {
     const el = Utils.$("note-detail");
@@ -363,7 +362,7 @@ const App = {
     if (String(State.note || "").trim() !== id) return;
 
     if (!note?.id) { el.innerHTML = '<div class="loading-hint">Note not found.</div>'; this._currentNote = null; return; }
-    this._primeCurrentNote(note);
+    this.primeSavedNote(note);
     UI.renderBreadcrumb(); el.innerHTML = this._renderNoteDetail(note); this._renderFolderTree();
   },
 
@@ -493,16 +492,16 @@ const App = {
 
   toggleTagByEncoded(e) {
     const tag = decodeURIComponent(e || ""); this._searchPanelOpen = false;
-    this.route({ view: State.category && !State.subcategory ? "category" : "list", category: State.category, subcategory: State.subcategory, note: "", q: State.q, tag: State.tag === tag ? "" : tag, page: 1 });
+    this.route({ note: "", tag: State.tag === tag ? "" : tag, page: 1 });
   },
   openSidebarTagByEncoded(e) {
     const t = decodeURIComponent(e || ""), n = State.tag === t ? "" : t; this._searchPanelOpen = false;
-    this.route({ view: n ? "list" : "index", category: "", subcategory: "", note: "", q: "", tag: n, page: 1 });
+    this.route({ category: "", subcategory: "", note: "", q: "", tag: n, page: 1 });
   },
   applySearch() {
     const q = String(Utils.$("note-search")?.value || "").trim();
     if (!q) return this.clearSearch();
-    this._searchPanelOpen = true; this.route({ view: "list", category: "", subcategory: "", note: "", q, tag: "", page: 1 });
+    this._searchPanelOpen = true; this.route({ category: "", subcategory: "", note: "", q, tag: "", page: 1 });
   },
   toggleSearchBox() {
     if (State.view === "backup") return;
@@ -516,9 +515,7 @@ const App = {
   clearSearch() {
     const i = Utils.$("note-search"); if (i) i.value = "";
     this._searchPanelOpen = false;
-    if (State.category && State.subcategory) this.route({ view: "list", category: State.category, subcategory: State.subcategory, note: "", q: "", tag: "", page: 1 });
-    else if (State.category) this.route({ view: "category", category: State.category, subcategory: "", note: "", q: "", tag: "", page: 1 });
-    else this.route({ view: "index", category: "", subcategory: "", note: "", q: "", tag: "", page: 1 });
+    this.route({ note: "", q: "", tag: "", page: 1 });
   },
   handleSearchKeydown(e) { if (e.key === "Enter") { e.preventDefault(); this.applySearch(); } },
   toggleJump(show) {
@@ -548,7 +545,7 @@ const App = {
       await API.req("delete", { id }, "DELETE");
       this._invalidateSidebarCaches();
       if (State.view === "note" && State.note === id) {
-        this.route({ view: (State.category && !State.subcategory) ? "category" : (State.category || State.q || State.tag ? "list" : "index"), note: "", page: State.page }, { quiet: true });
+        this.route({ note: "" }, { quiet: true });
       } else await this.loadView({ quiet: true });
       UI.setStatus("ok"); resetStatusLater("ok");
     } catch (e) { UI.setStatus("err"); resetStatusLater("err"); }
@@ -556,8 +553,8 @@ const App = {
 
   changePage(dir) { const n = State.page + dir; if (n >= 1 && n <= State.data.totalPg) this.route({ page: n }); },
   async goBack() {
-    if (State.view === "note") this.route({ view: (State.category && !State.subcategory) ? "category" : (State.category || State.q || State.tag ? "list" : "index"), note: "", page: State.page });
-    else if (State.view === "list" && State.category && State.subcategory) this.route({ view: "category", category: State.category, subcategory: "", note: "", q: "", tag: "", page: 1 });
+    if (State.view === "note") this.route({ note: "" });
+    else if (State.view === "list" && State.category && State.subcategory) this.route({ subcategory: "", page: 1 });
     else this.route({ view: "index", category: "", subcategory: "", note: "", q: "", tag: "", page: 1 });
   },
   closeEditor: () => Editor.close(),
