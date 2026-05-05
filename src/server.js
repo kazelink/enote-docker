@@ -9,7 +9,7 @@ import { db } from './lib/core.js';
 
 async function startup() {
     await ensureSchema();
-    
+
     // Schedule cron job
     cron.schedule('0 2 * * *', () => {
         console.log('Running scheduled garbage collection...');
@@ -22,12 +22,14 @@ async function startup() {
     mainApp.use('/*', async (c, next) => {
         await next();
         const p = c.req.path;
-        if (/\.(woff2?)$/.test(p) || p.startsWith('/assets/')) {
+        if (/\.(woff2?|ttf|eot|svg|png|jpe?g|gif|webp|ico|css|js|mjs)$/i.test(p) || p.startsWith('/assets/')) {
             c.header('Cache-Control', 'public, max-age=31536000, immutable');
-        } else if (p.endsWith('.html') || p === '/') {
-            c.header('Cache-Control', 'no-store');
-        } else if (/\.(css|js|mjs)$/.test(p)) {
+        }
+        else if (p.endsWith('.html') || p === '/') {
             c.header('Cache-Control', 'no-cache');
+        }
+        else {
+            c.header('Cache-Control', 'no-store');
         }
     });
 
