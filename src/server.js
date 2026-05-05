@@ -18,6 +18,19 @@ async function startup() {
 
     const mainApp = new Hono();
 
+    // Cache-Control middleware
+    mainApp.use('/*', async (c, next) => {
+        await next();
+        const p = c.req.path;
+        if (/\.(woff2?)$/.test(p) || p.startsWith('/assets/')) {
+            c.header('Cache-Control', 'public, max-age=31536000, immutable');
+        } else if (p.endsWith('.html') || p === '/') {
+            c.header('Cache-Control', 'no-store');
+        } else if (/\.(css|js|mjs)$/.test(p)) {
+            c.header('Cache-Control', 'no-cache');
+        }
+    });
+
     mainApp.use('/*', serveStatic({ root: './public' }));
 
     mainApp.route('/', app);
