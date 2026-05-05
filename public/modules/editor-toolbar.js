@@ -57,23 +57,25 @@ function findListAtCursor(sq, tag) {
 function removeList(sq, list) {
     const range = sq.getSelection();
     sq.saveUndoState(range);
-    const sc = range.startContainer, so = range.startOffset;
-    const ec = range.endContainer,   eo = range.endOffset;
 
-    const frag = document.createDocumentFragment();
+    const newBlocks = [];
     for (const li of Array.from(list.children)) {
-        if (li.nodeName !== 'LI') { frag.appendChild(li.cloneNode(true)); continue; }
+        if (li.nodeName !== 'LI') { newBlocks.push(li.cloneNode(true)); continue; }
         const p = document.createElement('P');
         while (li.firstChild) p.appendChild(li.firstChild);
-        frag.appendChild(p);
+        newBlocks.push(p);
     }
+    const frag = document.createDocumentFragment();
+    newBlocks.forEach(b => frag.appendChild(b));
     list.replaceWith(frag);
     sq._docWasChanged();
 
     try {
         const r = document.createRange();
-        r.setStart(sc, so);
-        r.setEnd(ec, eo);
+        const first = newBlocks[0];
+        const last = newBlocks[newBlocks.length - 1];
+        r.setStart(first, 0);
+        r.setEnd(last, last.childNodes.length);
         sq.setSelection(r);
     } catch (_) {
         sq.focus();
