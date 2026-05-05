@@ -469,7 +469,7 @@ const App = {
     const isCat = scope === "category", oldName = isCat ? category : subcategory;
     this._handleFolderAction("PUT", { oldCategory: category, oldSubcategory: isCat ? "" : subcategory }, "Rename", `Enter a new name for "${oldName}"`, "", (res, newName) => {
       if (State.category === category && (isCat || State.subcategory === subcategory)) {
-        return { view: State.view, category: isCat ? newName : category, subcategory: !isCat ? newName : State.subcategory, note: State.note, q: State.q, tag: State.tag, page: 1 };
+        return { category: isCat ? newName : category, subcategory: !isCat ? newName : State.subcategory, page: 1 };
       }
       return null;
     }, oldName);
