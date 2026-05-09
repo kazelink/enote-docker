@@ -25,16 +25,37 @@ export const IndentPlugin = {
         });
     },
 
+    getSelectedBlocks(sq) {
+        const blocks = [];
+        sq.forEachBlock((block) => {
+            blocks.push(block);
+        }, false);
+        return blocks;
+    },
+
     toggle(sq) {
-        sq.saveUndoState(sq.getSelection());
-        const shouldIndent = !this.isActive(sq);
+        const selection = sq.getSelection();
+        const blocks = this.getSelectedBlocks(sq);
+        if (!blocks.length) return;
+
+        sq.saveUndoState(selection);
+        const shouldIndent = !blocks.every((block) => block.classList.contains('indent'));
         sq.forEachBlock((block) => {
             block.classList.toggle('indent', shouldIndent);
-        }, true);
+        }, false);
+        sq._docWasChanged();
+        sq.setSelection(selection);
+        sq._updatePath?.(selection, true);
         sq.focus();
     },
 
     isActive(sq) {
+        const selection = sq.getSelection();
+        if (selection && !selection.collapsed) {
+            const blocks = this.getSelectedBlocks(sq);
+            return blocks.length > 0 && blocks.every((block) => block.classList.contains('indent'));
+        }
+
         const path = sq.getPath();
         return /\.indent(?:\.|>|\[|$)/.test(path);
     }

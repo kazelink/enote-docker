@@ -5,10 +5,10 @@ import { swalAlert, swalUnsaved } from './swal.js';
 import { Upload } from './upload.js';
 import { sanitizePastedHtml } from './paste.js?v=5.3';
 import Squire from '../assets/squire.mjs';
-import { IndentPlugin } from './editor-indent.js';
+import { IndentPlugin } from './editor-indent.js?v=5.4';
 import { ImagePlugin } from './editor-image.js';
 import { ColorPlugin } from './editor-color.js';
-import { ToolbarPlugin } from './editor-toolbar.js';
+import { ToolbarPlugin } from './editor-toolbar.js?v=5.4';
 
 const SEL = { header: '.d-item-header', text: '.dc-text', actions: '.item-actions', readMore: '.btn-read-more' };
 

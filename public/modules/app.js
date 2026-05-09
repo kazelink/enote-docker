@@ -2,7 +2,7 @@ import { Utils, State } from "./dom.js";
 import { API, authHeaders } from "./api.js";
 import { UI } from "./ui.js";
 import { swalConfirm, swalAlert, swalPrompt } from "./swal.js";
-import { Editor } from "./editor.js?v=5.3";
+import { Editor } from "./editor.js?v=5.4";
 import { Auth } from "./auth.js";
 
 const MAX_RESTORE_FILE_BYTES = 100 * 1024 * 1024;

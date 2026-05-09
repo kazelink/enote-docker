@@ -1,5 +1,5 @@
 import { Utils, getBlockFromRange } from './dom.js';
-import { IndentPlugin }    from './editor-indent.js';
+import { IndentPlugin }    from './editor-indent.js?v=5.4';
 import { ImagePlugin }     from './editor-image.js';
 
 const HEADING_BLOCKS = new Set(['P', 'DIV', 'H1', 'H2', 'BLOCKQUOTE']);
