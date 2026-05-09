@@ -3,7 +3,7 @@ import { authMiddleware } from '../lib/auth.js';
 import { ensureFolderRecords } from '../lib/folders.js';
 import { jsonError, parseJsonBody } from '../lib/http.js';
 import { sanitizeContent } from '../lib/sanitize.js';
-import { cleanupImages, normalizeFolderName, normalizeTagList, normalizeTitle, serializeTags } from '../lib/utils.js';
+import { cleanupImages, cleanupMediaKeys, normalizeFolderName, normalizeTagList, normalizeTitle, serializeTags } from '../lib/utils.js';
 import { V } from '../lib/validate.js';
 import { UPSERT_NOTE_SQL } from '../lib/sql.js';
 import { db, bucket, runBackground } from '../lib/core.js';
@@ -12,53 +12,62 @@ const router = new Hono();
 
 const MAX_SAVE_CONTENT_LENGTH = 500_000;
 const TMP_MEDIA_REGEX = /\/(img|video)\/tmp\/([a-zA-Z0-9.\-_]+)/g;
-const MAX_PROMOTE_CONCURRENCY = 4;
 
-async function runWithConcurrency(items, maxConcurrent, worker) {
-  const workerCount = Math.max(1, Math.min(maxConcurrent, items.length));
-  let idx = 0;
-  const runners = Array.from({ length: workerCount }, async () => {
-    while (idx < items.length) {
-      const current = items[idx];
-      idx += 1;
-      await worker(current);
-    }
-  });
-  await Promise.all(runners);
+function planTempMediaPromotion(content) {
+  const tmpMatches = [...content.matchAll(TMP_MEDIA_REGEX)];
+  const finalKeys = [...new Set(tmpMatches.map((m) => m[2]))];
+
+  if (finalKeys.length === 0) {
+    return { content, finalKeys: [] };
+  }
+
+  const updatedContent = content.replace(TMP_MEDIA_REGEX, (full, route, key) =>
+    finalKeys.includes(key) ? `/${route}/${key}` : full
+  );
+
+  return { content: updatedContent, finalKeys };
 }
 
-async function promoteTempMedia(bucket, content) {
-  const tmpMatches = [...content.matchAll(TMP_MEDIA_REGEX)];
-  const tmpKeys = [...new Set(tmpMatches.map((m) => m[2]))];
-
-  if (tmpKeys.length === 0) {
-    return { content, promotedKeys: [] };
+async function promotePlannedTempMedia(bucket, finalKeys) {
+  if (finalKeys.length === 0) {
+    return { promotedTmpKeys: [], promotedFinalKeys: [] };
   }
 
   if (!bucket) throw new Error('Storage not configured');
 
-  const promoted = new Set();
-  const promotedKeys = [];
-
-  await runWithConcurrency(tmpKeys, MAX_PROMOTE_CONCURRENCY, async (key) => {
+  const results = [];
+  for (const key of finalKeys) {
     const tmpKey = `tmp/${key}`;
     const obj = await bucket.get(tmpKey);
-    if (!obj) return;
+    if (!obj) throw new Error(`Missing temporary media: ${key}`);
     await bucket.put(key, obj.body, { httpMetadata: obj.httpMetadata });
-    promoted.add(key);
-    promotedKeys.push(tmpKey);
-  });
-
-  const missing = tmpKeys.filter((key) => !promoted.has(key));
-  if (missing.length > 0) {
-    throw new Error('Some temporary images are missing. Please re-upload and try again.');
+    results.push({ tmpKey, finalKey: key });
   }
 
-  const updatedContent = content.replace(TMP_MEDIA_REGEX, (full, route, key) =>
-    promoted.has(key) ? `/${route}/${key}` : full
-  );
+  return {
+    promotedTmpKeys: results.map((item) => item.tmpKey),
+    promotedFinalKeys: results.map((item) => item.finalKey)
+  };
+}
 
-  return { content: updatedContent, promotedKeys };
+async function restorePreviousNoteState(previousNote, id) {
+  if (!previousNote) {
+    await db.prepare('DELETE FROM notes WHERE id = ?').bind(id).run();
+    return;
+  }
+
+  await db.prepare(UPSERT_NOTE_SQL)
+    .bind(
+      previousNote.id,
+      previousNote.title,
+      previousNote.category,
+      previousNote.subcategory,
+      previousNote.tags,
+      previousNote.content,
+      previousNote.created_at,
+      previousNote.updated_at
+    )
+    .run();
 }
 
 function parseAndValidateRequest(body) {
@@ -112,20 +121,13 @@ router.post('/', authMiddleware, async (c) => {
       rawContent
     } = parseAndValidateRequest(body);
 
-    let sanitizedContent = await sanitizeContent(rawContent);
+    const sanitizedInput = await sanitizeContent(rawContent);
+    const promotionPlan = planTempMediaPromotion(sanitizedInput);
+    const sanitizedContent = promotionPlan.content;
     const previousNote = body?.id
-      ? await db.prepare('SELECT content, created_at FROM notes WHERE id = ?').bind(id).first()
+      ? await db.prepare('SELECT * FROM notes WHERE id = ?').bind(id).first()
       : null;
     const previousContent = typeof previousNote?.content === 'string' ? previousNote.content : '';
-
-    let promotedKeys = [];
-    try {
-      const promotionResult = await promoteTempMedia(bucket, sanitizedContent);
-      sanitizedContent = promotionResult.content;
-      promotedKeys = promotionResult.promotedKeys;
-    } catch (e) {
-      return jsonError(c, e.message, e.message.includes('missing') ? 409 : 500);
-    }
 
     const now = new Date().toISOString();
     const createdAt = typeof previousNote?.created_at === 'string' && previousNote.created_at
@@ -139,8 +141,20 @@ router.post('/', authMiddleware, async (c) => {
       .bind(id, title, category, subcategory, serializeTags(tags), sanitizedContent, createdAt, updatedAt)
       .run();
 
-    if (promotedKeys.length > 0) {
-      const uniqueTmpKeys = [...new Set(promotedKeys)];
+    let promotedTmpKeys = [];
+    try {
+      const promotionResult = await promotePlannedTempMedia(bucket, promotionPlan.finalKeys);
+      promotedTmpKeys = promotionResult.promotedTmpKeys;
+    } catch (e) {
+      await restorePreviousNoteState(previousNote, id);
+      await cleanupMediaKeys(bucket, promotionPlan.finalKeys, db);
+      return jsonError(c, e.message.includes('Missing temporary media')
+        ? 'Some temporary images are missing. Please re-upload and try again.'
+        : e.message, e.message.includes('Missing temporary media') ? 409 : 500);
+    }
+
+    if (promotedTmpKeys.length > 0) {
+      const uniqueTmpKeys = [...new Set(promotedTmpKeys)];
       runBackground((async () => {
         await Promise.allSettled(uniqueTmpKeys.map((key) => bucket.delete(key)));
       })());

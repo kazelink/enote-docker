@@ -1,3 +1,5 @@
+import sanitizeHtml from 'sanitize-html';
+
 const SAFE_DATA_IMAGE_RE = /^data:image\/(?:png|jpe?g|gif|webp);base64,[a-z0-9+/=\s]+$/i;
 
 function isSafeMediaSrc(value) {
@@ -14,26 +16,55 @@ function isSafeMediaSrc(value) {
   return SAFE_DATA_IMAGE_RE.test(compact);
 }
 
-function sanitizeHtml(html) {
-  let s = html;
-  const badTags = '(script|iframe|object|embed|form|base|link|meta|style|svg|math|noscript|template)';
-  s = s.replace(new RegExp(`<\\s*${badTags}\\b[^>]*>[\\s\\S]*?<\\s*\\/\\s*\\1\\s*>`, 'gim'), '');
-  s = s.replace(new RegExp(`<\\s*${badTags}\\b[^>]*>`, 'gim'), '');
-  s = s.replace(new RegExp(`<\\s*\\/\\s*${badTags}\\s*>`, 'gim'), '');
-  s = s.replace(/\s+on\w+\s*=\s*(?:"[^"]*"|'[^']*'|`[^`]*`|[^\s>]+)/gi, '');
-  s = s.replace(/j\s*a\s*v\s*a\s*s\s*c\s*r\s*i\s*p\s*t\s*:/gi, '');
-  s = s.replace(/v\s*b\s*s\s*c\s*r\s*i\s*p\s*t\s*:/gi, '');
-  s = s.replace(/data\s*:\s*text\/html/gi, '');
-
-  s = s.replace(/<(img|video)\s+([^>]*?)src=["']?([^"'\s>]+)["']?([^>]*?)>/gi, (match, tag, _pre, src) => {
-    if (!isSafeMediaSrc(src)) return '';
-    return tag.toLowerCase() === 'video' ? `<video src="${src}" controls preload="none">` : match;
-  });
-
-  return s.replace(/\s+(srcdoc|formaction|xlink:href)\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '');
-}
-
 export async function sanitizeContent(html) {
   if (typeof html !== 'string') return '';
-  return sanitizeHtml(html);
+
+  // Use sanitize-html to safely parse and clean HTML
+  return sanitizeHtml(html, {
+    // Allow essential text formatting tags
+    allowedTags: sanitizeHtml.defaults.allowedTags.concat(['img', 'video']),
+    
+    // Whitelist safe attributes
+    allowedAttributes: {
+      '*': ['class', 'style'],
+      'a': ['href', 'target', 'rel'],
+      'img': ['src', 'alt', 'loading', 'width', 'height'],
+      'video': ['src', 'controls', 'preload', 'width', 'height'],
+      'iframe': ['src', 'width', 'height', 'frameborder', 'allow'],
+      'source': ['src', 'type']
+    },
+    
+    // Strict allowed schemes
+    allowedSchemes: ['http', 'https', 'mailto', 'data'],
+    
+    // Enable URL filtering for media sources
+    allowedSchemesAppliedToImg: ['http', 'https', 'data'],
+    
+    // Custom filter for img/video tags - validate media sources
+    exclusiveFilter: (frame) => {
+      if ((frame.tag === 'img' || frame.tag === 'video' || frame.tag === 'source') && frame.attribs?.src) {
+        return !isSafeMediaSrc(frame.attribs.src);
+      }
+      return false;
+    },
+    
+    // Disable data: URLs except for base64 images
+    transformTags: {
+      'img': (tagName, attribs) => {
+        if (attribs.src && !isSafeMediaSrc(attribs.src)) {
+          return { tagName: 'img', attribs: { alt: 'Blocked content' } };
+        }
+        return { tagName, attribs };
+      },
+      'video': (tagName, attribs) => {
+        if (attribs.src && !isSafeMediaSrc(attribs.src)) {
+          return { tagName: 'video', attribs: { controls: 'controls' } };
+        }
+        return { tagName, attribs };
+      }
+    },
+    
+    // Strict disallowedTagsMode
+    disallowedTagsMode: 'discard'
+  });
 }

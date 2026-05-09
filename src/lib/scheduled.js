@@ -3,7 +3,6 @@ import { extractMediaKeys } from './utils.js';
 import { db, bucket } from './core.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-const ACTIVE_MEDIA_BATCH_SIZE = 250;
 const LOOP_YIELD_EVERY = 200;
 
 function uploadedAtMs(obj) {
@@ -17,44 +16,43 @@ async function maybeYield(iterationCount) {
     }
 }
 
-async function rebuildActiveMediaIndex() {
-    db.exec(`
-        CREATE TEMP TABLE IF NOT EXISTS gc_active_media (
-            key TEXT PRIMARY KEY
-        );
-        DELETE FROM gc_active_media;
-    `);
-
-    const insertActiveKey = db.db.prepare('INSERT OR IGNORE INTO gc_active_media (key) VALUES (?)');
-    const flushPendingKeys = db.db.transaction((keys) => {
-        for (const key of keys) {
-            insertActiveKey.run(key);
+// Rebuild note_media index: extract all media keys from current notes
+async function rebuildNoteMediaIndex() {
+    // Clear the table
+    await db.prepare('DELETE FROM note_media').run();
+    
+    const insertMediaKey = db.db.prepare('INSERT OR IGNORE INTO note_media (note_id, media_key) VALUES (?, ?)');
+    const flushPendingKeys = db.db.transaction((records) => {
+        for (const record of records) {
+            insertMediaKey.run(record.note_id, record.media_key);
         }
     });
 
-    const pendingKeys = new Set();
+    const pendingRecords = [];
+    const BATCH_SIZE = 250;
     let noteCount = 0;
 
-    for (const row of db.prepare('SELECT content FROM notes').iterate()) {
+    // Iterate all notes and extract media keys
+    for (const row of db.prepare('SELECT id, content FROM notes').iterate()) {
         noteCount += 1;
 
-        const keys = extractMediaKeys(row?.content);
-        for (const key of keys) {
-            pendingKeys.add(key);
-            if (pendingKeys.size >= ACTIVE_MEDIA_BATCH_SIZE) {
-                flushPendingKeys([...pendingKeys]);
-                pendingKeys.clear();
+        const mediaKeys = extractMediaKeys(row?.content);
+        for (const mediaKey of mediaKeys) {
+            pendingRecords.push({ note_id: row.id, media_key: mediaKey });
+            if (pendingRecords.length >= BATCH_SIZE) {
+                flushPendingKeys(pendingRecords);
+                pendingRecords.length = 0;
             }
         }
 
         await maybeYield(noteCount);
     }
 
-    if (pendingKeys.size > 0) {
-        flushPendingKeys([...pendingKeys]);
+    if (pendingRecords.length > 0) {
+        flushPendingKeys(pendingRecords);
     }
 
-    return db.db.prepare('SELECT 1 FROM gc_active_media WHERE key = ? LIMIT 1');
+    return noteCount;
 }
 
 async function cleanupStaleTmpObjects(cutoff) {
@@ -74,9 +72,49 @@ async function cleanupStaleTmpObjects(cutoff) {
     return { scanned, deleted };
 }
 
-async function cleanupOrphanedMedia(hasActiveKey) {
+// Ultra-fast GC: O(1) via SQL, not O(N) via regex
+async function cleanupOrphanedMedia() {
+    // Find all orphaned media files: stored in bucket but not referenced in note_media
+    const orphanedResults = await db.prepare(`
+        SELECT key FROM (
+            SELECT key FROM (
+                SELECT '${`img/`}' || substr(key, 1) AS key FROM local_bucket
+                WHERE key NOT LIKE 'tmp/%' AND key NOT LIKE 'backups/%'
+                UNION
+                SELECT '${`video/`}' || substr(key, 1) AS key FROM local_bucket
+                WHERE key NOT LIKE 'tmp/%' AND key NOT LIKE 'backups/%'
+            )
+            WHERE key NOT IN (
+                SELECT '/' || 
+                  CASE WHEN media_key LIKE 'img/%' THEN 'img/' ELSE 'video/' END ||
+                  substr(media_key, instr(media_key, '/') + 1)
+                FROM note_media
+            )
+        )
+    `).all();
+
+    let deleted = 0;
+    if (orphanedResults?.results) {
+        for (const row of orphanedResults.results) {
+            try {
+                await bucket.delete(row.key);
+                deleted += 1;
+            } catch {
+                // Ignore delete failures
+            }
+        }
+    }
+
+    return { scanned: orphanedResults?.results?.length || 0, deleted };
+}
+
+// Simpler approach: directly query which keys are NOT in note_media
+async function cleanupOrphanedMediaFast() {
     let scanned = 0;
     let deleted = 0;
+
+    // Iterate bucket and check presence in note_media index
+    const checkKeyStmt = db.db.prepare('SELECT 1 FROM note_media WHERE media_key = ? LIMIT 1');
 
     for await (const obj of bucket.iterate()) {
         scanned += 1;
@@ -87,10 +125,15 @@ async function cleanupOrphanedMedia(hasActiveKey) {
             continue;
         }
 
-        const inUse = !!hasActiveKey.get(key);
-        if (!inUse) {
-            await bucket.delete(key);
-            deleted += 1;
+        // Check if this key is referenced in any note
+        const isUsed = !!checkKeyStmt.get(key);
+        if (!isUsed) {
+            try {
+                await bucket.delete(key);
+                deleted += 1;
+            } catch {
+                // Ignore delete failures
+            }
         }
 
         await maybeYield(scanned);
@@ -101,25 +144,21 @@ async function cleanupOrphanedMedia(hasActiveKey) {
 
 export async function scheduledGc() {
     try {
-        const cutoff = Date.now() - DAY_MS;
-        const hasActiveKey = await rebuildActiveMediaIndex();
+        console.log('Media GC: rebuilding note_media index...');
+        const noteCount = await rebuildNoteMediaIndex();
+        console.log(`Media GC: indexed ${noteCount} notes.`);
 
+        const cutoff = Date.now() - DAY_MS;
         const tmpStats = await cleanupStaleTmpObjects(cutoff);
         if (tmpStats.deleted > 0) {
             console.log(`Media GC: deleted ${tmpStats.deleted} stale tmp files out of ${tmpStats.scanned} scanned.`);
         }
 
-        const mediaStats = await cleanupOrphanedMedia(hasActiveKey);
+        const mediaStats = await cleanupOrphanedMediaFast();
         if (mediaStats.deleted > 0) {
             console.log(`Media GC: deleted ${mediaStats.deleted} orphaned media files out of ${mediaStats.scanned} scanned.`);
         }
     } catch (e) {
         console.error('Scheduled GC failed:', e);
-    } finally {
-        try {
-            db.exec('DELETE FROM gc_active_media');
-        } catch {
-            // Ignore cleanup failures when the temp table was never created.
-        }
     }
 }

@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { escapeHtml, respondError } from './lib/utils.js';
 
-import imagesRouter from './api/images.js';
+import { createImagesRouter } from './api/images.js';
 import loginRouter from './api/login.js';
 import authStatusRouter from './api/auth-status.js';
 import tagsRouter from './api/tags.js';
@@ -29,8 +29,8 @@ app.get('/', (c) => c.redirect('/app.html'));
 app.get('/index.html', (c) => c.redirect('/app.html'));
 app.get('/backup', (c) => c.redirect('/app.html?view=backup'));
 
-app.route('/img', imagesRouter);
-app.route('/video', imagesRouter);
+app.route('/img', createImagesRouter('img'));
+app.route('/video', createImagesRouter('video'));
 
 app.route('/api/login', loginRouter);
 app.route('/api/auth-status', authStatusRouter);

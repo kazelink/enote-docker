@@ -12,6 +12,18 @@ const router = new Hono();
 // isolate recycling only weakens brute-force protection temporarily.
 const loginLimits = new Map();
 
+function cleanupStaleLimits() {
+  const now = Date.now();
+  for (const [ip, record] of loginLimits.entries()) {
+    if (!record?.lastFailAt || now - record.lastFailAt > CONFIG.LOGIN.LOCK_MS) {
+      loginLimits.delete(ip);
+    }
+  }
+}
+
+const cleanupTimer = setInterval(cleanupStaleLimits, 10 * 60 * 1000);
+cleanupTimer.unref?.();
+
 function getLimit(ip) {
   const record = loginLimits.get(ip);
   if (!record) return null;

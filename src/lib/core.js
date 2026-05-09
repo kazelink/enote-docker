@@ -111,6 +111,23 @@ class LocalPreparedStatement {
     }
 }
 
+// MIME type mapping for fast inference
+const MIME_BY_EXT = {
+    'jpg': 'image/jpeg',
+    'jpeg': 'image/jpeg',
+    'png': 'image/png',
+    'gif': 'image/gif',
+    'webp': 'image/webp',
+    'mp4': 'video/mp4',
+    'webm': 'video/webm',
+    'mov': 'video/quicktime'
+};
+
+function getMimeTypeFromExtension(key) {
+    const ext = key.split('.').pop()?.toLowerCase();
+    return ext ? (MIME_BY_EXT[ext] || 'application/octet-stream') : 'application/octet-stream';
+}
+
 class LocalStorage {
     constructor(baseDir) {
         this.baseDir = baseDir;
@@ -130,12 +147,6 @@ class LocalStorage {
         if (!fs.existsSync(dir)) {
             fs.mkdirSync(dir, { recursive: true });
         }
-
-        const metaPath = filePath + '.meta.json';
-        const meta = {
-            httpMetadata: options.httpMetadata || {},
-            customMetadata: options.customMetadata || {}
-        };
 
         try {
             const isBlobLike =
@@ -159,14 +170,11 @@ class LocalStorage {
                 fs.writeFileSync(filePath, Buffer.from(body));
             }
 
-            fs.writeFileSync(metaPath, JSON.stringify(meta));
+            // No .meta.json file needed – MIME type inferred from extension
             return { key };
         } catch (error) {
             if (fs.existsSync(filePath)) {
                 fs.unlinkSync(filePath);
-            }
-            if (fs.existsSync(metaPath)) {
-                fs.unlinkSync(metaPath);
             }
             throw error;
         }
@@ -178,24 +186,19 @@ class LocalStorage {
             return null;
         }
 
-        const metaPath = filePath + '.meta.json';
-        let meta = { httpMetadata: {}, customMetadata: {} };
-        if (fs.existsSync(metaPath)) {
-            meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
-        }
+        // Infer Content-Type from file extension
+        const contentType = getMimeTypeFromExtension(key);
 
         const nodeStream = fs.createReadStream(filePath);
         const webStream = Readable.toWeb(nodeStream);
 
         return {
             body: webStream,
-            httpMetadata: meta.httpMetadata || {},
+            httpMetadata: { contentType },
             writeHttpMetadata: (headers) => {
-                if (meta.httpMetadata && meta.httpMetadata.contentType) {
-                    headers.set('Content-Type', meta.httpMetadata.contentType);
-                }
+                headers.set('Content-Type', contentType);
             },
-            customMetadata: meta.customMetadata
+            customMetadata: {}
         };
     }
 
@@ -215,7 +218,17 @@ class LocalStorage {
 
         try {
             for await (const entry of handle) {
-                if (entry.name.endsWith('.meta.json')) continue;
+                // Skip .meta.json files (legacy cleanup)
+                if (entry.name.endsWith('.meta.json')) {
+                    // Optionally delete stale .meta.json files on iteration
+                    try {
+                        const metaPath = path.join(dir, entry.name);
+                        fs.unlinkSync(metaPath);
+                    } catch {
+                        // Ignore cleanup errors
+                    }
+                    continue;
+                }
 
                 const fullPath = path.join(dir, entry.name);
                 const relativeKey = currentPrefix ? `${currentPrefix}${entry.name}` : entry.name;
@@ -246,10 +259,7 @@ class LocalStorage {
         if (fs.existsSync(filePath)) {
             fs.unlinkSync(filePath);
         }
-        const metaPath = filePath + '.meta.json';
-        if (fs.existsSync(metaPath)) {
-            fs.unlinkSync(metaPath);
-        }
+        // No .meta.json to delete
     }
 }
 

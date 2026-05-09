@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { authMiddleware } from '../lib/auth.js';
-import { jsonError } from '../lib/http.js';
+import { getQueryString, jsonError } from '../lib/http.js';
 import { cleanupMediaKeys, extractMediaKeys } from '../lib/utils.js';
 import { V } from '../lib/validate.js';
 import { db, bucket, runBackground } from '../lib/core.js';
@@ -8,7 +8,7 @@ import { db, bucket, runBackground } from '../lib/core.js';
 const router = new Hono();
 
 router.delete('/', authMiddleware, async (c) => {
-  const id = c.req.query('id');
+  const id = getQueryString(c, 'id');
   if (!id || !V.isUUID(id)) return jsonError(c, 'Invalid ID', 400);
 
   const entry = await db.prepare('SELECT content FROM notes WHERE id = ?').bind(id).first();

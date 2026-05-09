@@ -122,33 +122,21 @@ const PROTECTED_PREFIXES = ['backups/'];
 const isProtectedKey = (key) =>
     PROTECTED_PREFIXES.some((prefix) => String(key || '').startsWith(prefix));
 
+// Use note_media table for fast media key lookup
 async function filterUnusedMediaKeys(db, keys) {
     if (!db || !Array.isArray(keys) || keys.length === 0) return keys;
 
-    const queries = keys.map((key) =>
-        db.prepare(`
-            SELECT 1 AS used
-            FROM notes
-            WHERE instr(content, ?) > 0 OR instr(content, ?) > 0
-            LIMIT 1
-        `).bind(`/img/${key}`, `/video/${key}`)
-    );
+    const placeholders = keys.map(() => '?').join(', ');
+    
+    // Fast: indexed query against note_media table
+    const usedResult = await db.prepare(`
+        SELECT DISTINCT media_key
+        FROM note_media
+        WHERE media_key IN (${placeholders})
+    `).bind(...keys).all();
 
-    const unusedKeys = [];
-    try {
-        const batchResults = await db.batch(queries);
-        for (let i = 0; i < keys.length; i++) {
-            const hasUsed = batchResults[i]?.results?.[0]?.used;
-            if (!hasUsed) {
-                unusedKeys.push(keys[i]);
-            }
-        }
-    } catch (e) {
-        console.error('Batch media check failed:', e);
-        return [];
-    }
-
-    return unusedKeys;
+    const usedKeys = new Set((usedResult?.results || []).map(r => r.media_key));
+    return keys.filter(key => !usedKeys.has(key));
 }
 
 export async function cleanupMediaKeys(bucket, keys, db = null) {

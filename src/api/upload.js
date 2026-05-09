@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { Readable, Transform } from 'stream';
 import { authMiddleware } from '../lib/auth.js';
 import { jsonError, getContentLength } from '../lib/http.js';
+import { renderMediaEmbed } from '../lib/views.js';
 import { bucket } from '../lib/core.js';
 
 const router = new Hono();
@@ -127,10 +128,7 @@ function mediaResponse(c, filename, mime) {
   const mediaUrl = `/${routeBase}/${filename}`;
 
   if (c.req.header('HX-Request')) {
-    const htmlTag = mime.startsWith('video/')
-      ? `<video src="${mediaUrl}" controls preload="metadata"></video>`
-      : `<img src="${mediaUrl}" loading="lazy" />`;
-    return c.html(htmlTag);
+    return c.html(renderMediaEmbed(mediaUrl, mime));
   }
 
   return c.json({ url: mediaUrl });

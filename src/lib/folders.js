@@ -54,56 +54,62 @@ export async function restoreFolderEntries(db, folders) {
   }
 }
 
+// Optimized: Use SQLite json_group_array for tree structure in database
 export async function loadFolderTree(db) {
-  const [categoriesRes, subfoldersRes] = await db.batch([
-    db.prepare(`
-      SELECT
-        f.category,
-        COALESCE(ns.cnt, 0) AS count,
-        COALESCE(ns.max_upd, sf.max_upd, f.updated_at) AS updated_at
-      FROM folders f
-      LEFT JOIN (
-        SELECT category, COUNT(*) AS cnt, MAX(updated_at) AS max_upd
-        FROM notes
-        GROUP BY category
-      ) ns ON ns.category = f.category
-      LEFT JOIN (
-        SELECT category, MAX(updated_at) AS max_upd
-        FROM folders
-        WHERE subcategory != ''
-        GROUP BY category
-      ) sf ON sf.category = f.category
-      WHERE f.subcategory = ''
-      ORDER BY lower(f.category) ASC
-    `),
-    db.prepare(`
-      SELECT
-        f.category,
-        f.subcategory,
-        COALESCE(ns.cnt, 0) AS count,
-        COALESCE(ns.max_upd, f.updated_at) AS updated_at
-      FROM folders f
-      LEFT JOIN (
-        SELECT category, subcategory, COUNT(*) AS cnt, MAX(updated_at) AS max_upd
-        FROM notes
-        GROUP BY category, subcategory
-      ) ns ON ns.category = f.category AND ns.subcategory = f.subcategory
-      WHERE f.subcategory != ''
-      ORDER BY lower(f.subcategory) ASC
-    `)
-  ]);
+  // Single optimized query: SQLite builds the tree structure
+  const result = await db.prepare(`
+    SELECT
+      f.category,
+      COALESCE(cat_notes.cnt, 0) AS count,
+      COALESCE(cat_notes.max_upd, f.updated_at) AS updated_at,
+      COALESCE(
+        json_group_array(
+          json_object(
+            'category', sf.category,
+            'subcategory', sf.subcategory,
+            'count', COALESCE(sub_notes.cnt, 0),
+            'updated_at', COALESCE(sub_notes.max_upd, sf.updated_at)
+          )
+        ) FILTER (WHERE sf.subcategory != ''),
+        '[]'
+      ) AS subfolders_json
+    FROM folders f
+    LEFT JOIN (
+      SELECT category, COUNT(*) AS cnt, MAX(updated_at) AS max_upd
+      FROM notes
+      GROUP BY category
+    ) cat_notes ON cat_notes.category = f.category
+    LEFT JOIN folders sf ON sf.category = f.category
+    LEFT JOIN (
+      SELECT category, subcategory, COUNT(*) AS cnt, MAX(updated_at) AS max_upd
+      FROM notes
+      GROUP BY category, subcategory
+    ) sub_notes ON sub_notes.category = sf.category AND sub_notes.subcategory = sf.subcategory
+    WHERE f.subcategory = ''
+    GROUP BY f.category, f.updated_at, cat_notes.cnt, cat_notes.max_upd
+    ORDER BY lower(f.category) ASC
+  `).all();
 
-  const categories = categoriesRes.results || [];
-  const allSubfolders = subfoldersRes.results || [];
+  if (!result?.results) return [];
 
-  const subMap = new Map();
-  for (const sub of allSubfolders) {
-    if (!subMap.has(sub.category)) subMap.set(sub.category, []);
-    subMap.get(sub.category).push(sub);
-  }
-
-  return categories.map(cat => ({
-    ...cat,
-    subfolders: subMap.get(cat.category) || []
-  }));
+  // Parse JSON and build tree
+  return result.results.map(row => {
+    try {
+      const subfolders = row.subfolders_json ? JSON.parse(row.subfolders_json) : [];
+      return {
+        category: row.category,
+        count: row.count,
+        updated_at: row.updated_at,
+        subfolders: Array.isArray(subfolders) ? subfolders : []
+      };
+    } catch (e) {
+      console.error('Failed to parse subfolders JSON:', e);
+      return {
+        category: row.category,
+        count: row.count,
+        updated_at: row.updated_at,
+        subfolders: []
+      };
+    }
+  });
 }

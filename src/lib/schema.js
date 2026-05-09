@@ -1,7 +1,17 @@
 const RETRY_DELAYS_MS = [0, 250, 750, 1500];
-const REQUIRED_TABLES = ['notes', 'folders'];
+const REQUIRED_TABLES = ['notes', 'folders', 'note_tags', 'note_media', 'notes_fts'];
+const REQUIRED_TRIGGERS = [
+  'note_tags_after_insert',
+  'note_tags_after_update',
+  'note_tags_after_delete',
+  'notes_fts_after_insert',
+  'notes_fts_after_update',
+  'notes_fts_after_delete'
+];
 const TABLE_COLUMNS = {
   notes: ['id', 'title', 'category', 'subcategory', 'tags', 'content', 'created_at', 'updated_at'],
+  note_tags: ['note_id', 'tag_name', 'tag_key'],
+  note_media: ['note_id', 'media_key'],
   folders: ['category', 'subcategory', 'created_at', 'updated_at']
 };
 
@@ -13,8 +23,35 @@ CREATE TABLE IF NOT EXISTS notes (
   subcategory TEXT NOT NULL,
   tags TEXT NOT NULL DEFAULT '[]',
   content TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+`.trim();
+
+const CREATE_NOTE_TAGS_TABLE_SQL = `
+CREATE TABLE IF NOT EXISTS note_tags (
+  note_id TEXT NOT NULL,
+  tag_name TEXT NOT NULL,
+  tag_key TEXT NOT NULL,
+  PRIMARY KEY (note_id, tag_key)
+);
+`.trim();
+
+const CREATE_NOTE_MEDIA_TABLE_SQL = `
+CREATE TABLE IF NOT EXISTS note_media (
+  note_id TEXT NOT NULL,
+  media_key TEXT NOT NULL,
+  PRIMARY KEY (note_id, media_key),
+  FOREIGN KEY (note_id) REFERENCES notes(id) ON DELETE CASCADE
+);
+`.trim();
+
+const CREATE_NOTES_FTS_SQL = `
+CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
+  title,
+  content,
+  content='notes',
+  content_rowid='rowid'
 );
 `.trim();
 
@@ -22,8 +59,8 @@ const CREATE_FOLDERS_TABLE_SQL = `
 CREATE TABLE IF NOT EXISTS folders (
   category TEXT NOT NULL,
   subcategory TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (category, subcategory)
 );
 `.trim();
@@ -52,11 +89,83 @@ const INDEX_STATEMENTS = [
   'CREATE INDEX IF NOT EXISTS idx_notes_title_nocase ON notes(title COLLATE NOCASE ASC);',
   'CREATE INDEX IF NOT EXISTS idx_notes_cat_sub_title ON notes(category, subcategory, title COLLATE NOCASE ASC);',
   'CREATE INDEX IF NOT EXISTS idx_notes_cat_title ON notes(category, title COLLATE NOCASE ASC);',
+  'CREATE INDEX IF NOT EXISTS idx_note_tags_tag_key ON note_tags(tag_key, note_id);',
+  'CREATE INDEX IF NOT EXISTS idx_note_tags_note_id ON note_tags(note_id);',
+  'CREATE INDEX IF NOT EXISTS idx_note_media_media_key ON note_media(media_key);',
+  'CREATE INDEX IF NOT EXISTS idx_note_media_note_id ON note_media(note_id);',
   'CREATE INDEX IF NOT EXISTS idx_folders_subcategory ON folders(subcategory);',
-  // Drop legacy/redundant indexes
   'DROP INDEX IF EXISTS idx_notes_title;',
   'DROP INDEX IF EXISTS idx_folders_category;',
   'DROP INDEX IF EXISTS idx_folders_category_subcategory;'
+];
+
+const TRIGGER_STATEMENTS = [
+  'DROP TRIGGER IF EXISTS note_tags_after_insert;',
+  'DROP TRIGGER IF EXISTS note_tags_after_update;',
+  'DROP TRIGGER IF EXISTS note_tags_after_delete;',
+  'DROP TRIGGER IF EXISTS notes_fts_after_insert;',
+  'DROP TRIGGER IF EXISTS notes_fts_after_update;',
+  'DROP TRIGGER IF EXISTS notes_fts_after_delete;',
+  `
+  CREATE TRIGGER note_tags_after_insert
+  AFTER INSERT ON notes
+  BEGIN
+    INSERT OR IGNORE INTO note_tags (note_id, tag_name, tag_key)
+    SELECT
+      NEW.id,
+      trim(CAST(value AS TEXT)),
+      lower(trim(CAST(value AS TEXT)))
+    FROM json_each(CASE WHEN json_valid(NEW.tags) THEN NEW.tags ELSE '[]' END)
+    WHERE trim(CAST(value AS TEXT)) != '';
+  END
+  `,
+  `
+  CREATE TRIGGER note_tags_after_update
+  AFTER UPDATE OF tags ON notes
+  BEGIN
+    DELETE FROM note_tags WHERE note_id = OLD.id;
+    INSERT OR IGNORE INTO note_tags (note_id, tag_name, tag_key)
+    SELECT
+      NEW.id,
+      trim(CAST(value AS TEXT)),
+      lower(trim(CAST(value AS TEXT)))
+    FROM json_each(CASE WHEN json_valid(NEW.tags) THEN NEW.tags ELSE '[]' END)
+    WHERE trim(CAST(value AS TEXT)) != '';
+  END
+  `,
+  `
+  CREATE TRIGGER note_tags_after_delete
+  AFTER DELETE ON notes
+  BEGIN
+    DELETE FROM note_tags WHERE note_id = OLD.id;
+  END
+  `,
+  `
+  CREATE TRIGGER notes_fts_after_insert
+  AFTER INSERT ON notes
+  BEGIN
+    INSERT INTO notes_fts(rowid, title, content)
+    VALUES (NEW.rowid, NEW.title, NEW.content);
+  END
+  `,
+  `
+  CREATE TRIGGER notes_fts_after_update
+  AFTER UPDATE OF title, content ON notes
+  BEGIN
+    INSERT INTO notes_fts(notes_fts, rowid, title, content)
+    VALUES('delete', OLD.rowid, OLD.title, OLD.content);
+    INSERT INTO notes_fts(rowid, title, content)
+    VALUES (NEW.rowid, NEW.title, NEW.content);
+  END
+  `,
+  `
+  CREATE TRIGGER notes_fts_after_delete
+  AFTER DELETE ON notes
+  BEGIN
+    INSERT INTO notes_fts(notes_fts, rowid, title, content)
+    VALUES('delete', OLD.rowid, OLD.title, OLD.content);
+  END
+  `
 ];
 
 function sleep(ms) {
@@ -81,6 +190,9 @@ async function getTableColumns(db, tableName) {
 async function hasRequiredSchema(db) {
   const tablesReady = await hasRequiredObjects(db, 'table', REQUIRED_TABLES);
   if (!tablesReady) return false;
+
+  const triggersReady = await hasRequiredObjects(db, 'trigger', REQUIRED_TRIGGERS);
+  if (!triggersReady) return false;
 
   for (const [tableName, columns] of Object.entries(TABLE_COLUMNS)) {
     const existingColumns = await getTableColumns(db, tableName);
@@ -206,12 +318,45 @@ async function backfillFoldersFromNotes(db) {
   `);
 }
 
+async function syncNoteTags(db) {
+  await runStatement(db, 'DELETE FROM note_tags');
+  await runStatement(db, `
+    INSERT OR IGNORE INTO note_tags (note_id, tag_name, tag_key)
+    SELECT
+      n.id,
+      trim(CAST(json_each.value AS TEXT)) AS tag_name,
+      lower(trim(CAST(json_each.value AS TEXT))) AS tag_key
+    FROM notes n, json_each(CASE WHEN json_valid(n.tags) THEN n.tags ELSE '[]' END)
+    WHERE trim(CAST(json_each.value AS TEXT)) != ''
+  `);
+}
+
+async function rebuildNotesFts(db) {
+  await runStatement(db, "INSERT INTO notes_fts(notes_fts) VALUES('rebuild')");
+}
+
+async function applySearchTriggers(db) {
+  for (const sql of TRIGGER_STATEMENTS) {
+    await runStatement(db, sql);
+  }
+}
+
 async function applySchema(db) {
   await runStatement(db, CREATE_NOTES_TABLE_SQL);
   await ensureTableColumns(db, 'notes');
 
   const noteColumns = await getTableColumns(db, 'notes');
   await backfillLegacyNotes(db, noteColumns);
+
+  await runStatement(db, CREATE_NOTE_TAGS_TABLE_SQL);
+  await ensureTableColumns(db, 'note_tags');
+  
+  await runStatement(db, CREATE_NOTE_MEDIA_TABLE_SQL);
+  await ensureTableColumns(db, 'note_media');
+  
+  await runStatement(db, CREATE_NOTES_FTS_SQL);
+  await syncNoteTags(db);
+  await rebuildNotesFts(db);
 
   await runStatement(db, CREATE_FOLDERS_TABLE_SQL);
   await ensureTableColumns(db, 'folders');
@@ -220,6 +365,8 @@ async function applySchema(db) {
   for (const sql of INDEX_STATEMENTS) {
     await runStatement(db, sql);
   }
+
+  await applySearchTriggers(db);
 
   await runStatement(db, 'DROP TABLE IF EXISTS note_stats');
   await runStatement(db, 'DROP TRIGGER IF EXISTS t_insert_note');
