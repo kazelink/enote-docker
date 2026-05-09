@@ -570,7 +570,6 @@ export const Editor = {
         const el = this.el;
         if (!el.dText || !el.nTitle || !el.nCategory || !el.nSubcategory || !el.nTags || !this.wrapper) return;
 
-        this.wrapper.style.display = 'flex';
         this._setEditorHTML(data.content || '');
         el.nTitle.value = data.title || '';
         el.nCategory.value = data.category || '';
@@ -579,6 +578,8 @@ export const Editor = {
 
         this._setMetaCollapsed(false);
         this._updateMetaStatus(data.updatedAt);
+
+        this.wrapper.style.display = 'flex';
 
         this._openMode = mode === 'new' ? 'new' : (anchorEl ? 'inline-edit' : 'standalone-edit');
         if (el.saveTxt) el.saveTxt.innerText = 'SAVE';
@@ -662,8 +663,10 @@ export const Editor = {
 
     _cleanupContext() {
         this._setEditorHTML('');
+        ['nTitle', 'nCategory', 'nSubcategory', 'nTags'].forEach(k => { if (this.el[k]) this.el[k].value = ''; });
+
         this.wrapper.style.display = 'none';
-        this.wrapper.classList.remove('editor-fullscreen', 'editor-loading', 'editor-in-card', 'editor-in-new');['nTitle', 'nCategory', 'nSubcategory', 'nTags'].forEach(k => { if (this.el[k]) this.el[k].value = ''; });
+        this.wrapper.classList.remove('editor-fullscreen', 'editor-loading', 'editor-in-card', 'editor-in-new');
         this._hideMetaSuggestions();
         this._setMetaCollapsed(false);
         this._updateMetaStatus('');
