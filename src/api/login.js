@@ -117,10 +117,13 @@ router.post('/', async (c) => {
     
     await ensureSchema().catch(err => console.error('ensureSchema error after login:', err));
     
+    const proto = c.req.header('x-forwarded-proto') || (new URL(c.req.url).protocol === 'https:' ? 'https' : 'http');
+    const isHttps = proto === 'https';
+
     setCookie(c, 'enote_auth', token, {
       path: '/',
       httpOnly: true,
-      secure: false,
+      secure: isHttps,
       sameSite: 'Lax',
       maxAge: 7 * 24 * 60 * 60
     });
