@@ -1,5 +1,5 @@
 import { Utils, State } from "./dom.js";
-import { API, authHeaders, Nonce } from "./api.js";
+import { API, authHeaders } from "./api.js";
 import { UI } from "./ui.js";
 import { swalConfirm, swalAlert, swalPrompt } from "./swal.js";
 import { Editor } from "./editor.js?v=5.4";
@@ -154,10 +154,10 @@ const App = {
     const footerYear = Utils.$("footer-year");
     if (footerYear) footerYear.textContent = new Date().getFullYear();
 
-    if (Nonce.get() && await API.checkAuth().catch(() => false)) {
+    if (sessionStorage.getItem("session_nonce") && await API.checkAuth().catch(() => false)) {
       await this.loadView();
     } else {
-      Nonce.clear();
+      sessionStorage.removeItem("session_nonce");
       UI.showAuth();
     }
     document.body.classList.add("ready");
@@ -592,7 +592,7 @@ const App = {
       if (file.size > MAX_RESTORE_FILE_BYTES) throw new Error("Backup file too large (max 100MB).");
       await nextFrame();
       const res = await fetch("/api/backup/restore", { method: "POST", headers: authHeaders({ "Content-Type": "application/json", "X-Backup-Upload": "file", "X-Backup-Size": String(file.size) }), body: file, credentials: "include", cache: "no-store" });
-      if (res.status === 401) { Nonce.clear(); UI.showAuth(); throw new Error("Unauthorized"); }
+      if (res.status === 401) { sessionStorage.removeItem("session_nonce"); UI.showAuth(); throw new Error("Unauthorized"); }
       showRestoreMessage("info", "Restoring backup...");
       const payload = (res.headers.get("content-type") || "").toLowerCase().includes("application/json") ? await res.json().catch(() => null) : { error: await res.text().catch(() => "") };
       if (!res.ok) throw new Error(payload?.error || "Restore failed.");
@@ -610,7 +610,7 @@ const App = {
     try {
       const cat = Utils.$("backup-category")?.value?.trim() === '(All Categories)' ? '' : Utils.$("backup-category")?.value?.trim() || "";
       const res = await fetch(`/api/backup/export${cat ? `?category=${encodeURIComponent(cat)}` : ""}`, { headers: authHeaders() });
-      if (res.status === 401) { Nonce.clear(); UI.showAuth(); throw new Error("Unauthorized"); }
+      if (res.status === 401) { sessionStorage.removeItem("session_nonce"); UI.showAuth(); throw new Error("Unauthorized"); }
       if (!res.ok) throw new Error((await res.json().catch(() => { })).error || "Download failed");
       await saveResponseToFile(res, getDownloadFilename(res.headers.get("content-disposition") || ""));
       UI.setStatus("");
@@ -633,7 +633,7 @@ const App = {
   },
 
   _setupHtmxListeners() {
-    document.addEventListener("htmx:configRequest", e => { const nonce = Nonce.get(); if (nonce) e.detail.headers["X-Session-Nonce"] = nonce; });
+    document.addEventListener("htmx:configRequest", e => { const nonce = sessionStorage.getItem("session_nonce"); if (nonce) e.detail.headers["X-Session-Nonce"] = nonce; });
     document.addEventListener("htmx:beforeRequest", e => { if (e.target.id !== "auth-form") UI.setStatus("loading"); });
     document.addEventListener("change", async e => {
       const inp = e.target;

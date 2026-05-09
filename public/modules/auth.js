@@ -1,6 +1,5 @@
 import { Utils, RI_SVGS } from './dom.js';
 import { UI } from './ui.js';
-import { Nonce } from './api.js';
 
 export const Auth = {
     init() {
@@ -30,7 +29,7 @@ export const Auth = {
         });
 
         document.body.addEventListener('loginSuccess', async e => {
-            if (e.detail?.nonce) Nonce.set(e.detail.nonce);
+            if (e.detail?.nonce) sessionStorage.setItem('session_nonce', e.detail.nonce);
             if (btn) {
                 btn.innerHTML = '<i class="ri-check-line" style="font-size:24px"></i>';
                 btn.style.background = 'var(--success)';
