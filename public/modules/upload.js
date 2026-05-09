@@ -1,4 +1,5 @@
 import { UI } from './ui.js';
+import { Nonce } from './api.js';
 import { swalAlert } from './swal.js';
 
 const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
@@ -67,7 +68,7 @@ export const Upload = {
         xhr.open('POST', '/api/upload', true);
         xhr.setRequestHeader('Content-Type', mime);
         
-        const authNonce = sessionStorage.getItem('session_nonce');
+        const authNonce = Nonce.get();
         if (authNonce) xhr.setRequestHeader('X-Session-Nonce', authNonce);
 
         const startTime = Date.now();
@@ -107,7 +108,7 @@ export const Upload = {
         xhr.onload = () => {
             cleanup();
             if (xhr.status === 401) {
-                sessionStorage.removeItem('session_nonce');
+                Nonce.clear();
                 UI.showAuth();
                 return;
             }

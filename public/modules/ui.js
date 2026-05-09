@@ -1,4 +1,4 @@
-import { Utils, State, RI_SVGS, loadScript } from './dom.js';
+import { Utils, RI_SVGS, loadScript } from './dom.js';
 
 
 const AUTH_ARROW_SVG = '<svg viewBox="0 0 24 24"><path d="M16.172 11l-5.364-5.364 1.414-1.414L20 12l-7.778 7.778-1.414-1.414L16.172 13H4v-2z"></path></svg>';
@@ -78,26 +78,25 @@ export const UI = {
         statusEl.innerHTML = STATUS_ICONS[mode] || '';
     },
 
-    renderBreadcrumb() {
+    renderBreadcrumb({ view, category, subcategory, q, tag, currentNote = null, notePathHint = null, onNavigate = null }) {
         const titleEl = Utils.$('c-title-box');
         if (!titleEl) return;
-        const currentNote = window.App?._currentNote;
-        const notePathHint = window.App?._notePathHint || null;
-        const noteCategory = State.view === 'note' && !State.category
+        const navigate = onNavigate || (() => {});
+        const noteCategory = view === 'note' && !category
             ? String(currentNote?.category || notePathHint?.category || '')
-            : String(State.category || '');
-        const noteSubcategory = State.view === 'note' && !State.subcategory
+            : String(category || '');
+        const noteSubcategory = view === 'note' && !subcategory
             ? String(currentNote?.subcategory || notePathHint?.subcategory || '')
-            : String(State.subcategory || '');
+            : String(subcategory || '');
 
-        if (State.view === 'backup') {
+        if (view === 'backup') {
             titleEl.textContent = 'BACKUP';
             return;
         }
 
         titleEl.innerHTML = '';
-        if (State.view === 'index') {
-            appendCrumb(titleEl, 'NOTES', () => window.App?.route({
+        if (view === 'index') {
+            appendCrumb(titleEl, 'NOTES', () => navigate({
                 view: 'index',
                 category: '',
                 subcategory: '',
@@ -109,14 +108,14 @@ export const UI = {
             return;
         }
 
-        if ((State.view === 'list' || State.view === 'note') && !noteCategory && !noteSubcategory) {
-            appendCrumb(titleEl, State.q || State.tag ? 'SEARCH' : 'LIBRARY', null);
+        if ((view === 'list' || view === 'note') && !noteCategory && !noteSubcategory) {
+            appendCrumb(titleEl, q || tag ? 'SEARCH' : 'LIBRARY', null);
             return;
         }
 
         if (noteCategory) {
-            appendCrumb(titleEl, noteCategory, (State.view === 'list' || State.view === 'note')
-                ? () => window.App?.route({
+            appendCrumb(titleEl, noteCategory, (view === 'list' || view === 'note')
+                ? () => navigate({
                     view: 'category',
                     category: noteCategory,
                     subcategory: '',
@@ -130,8 +129,8 @@ export const UI = {
 
         if (noteSubcategory) {
             if (titleEl.childNodes.length) appendDivider(titleEl);
-            appendCrumb(titleEl, noteSubcategory, (State.view === 'list' || State.view === 'note')
-                ? () => window.App?.route({
+            appendCrumb(titleEl, noteSubcategory, (view === 'list' || view === 'note')
+                ? () => navigate({
                     view: 'list',
                     category: noteCategory,
                     subcategory: noteSubcategory,

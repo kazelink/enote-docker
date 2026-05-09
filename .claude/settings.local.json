@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node --check public/modules/api.js)",
+      "Bash(node --check public/modules/auth.js)",
+      "Bash(node --check public/modules/upload.js)",
+      "Bash(node --check public/modules/dom.js)",
+      "Bash(node --check public/modules/ui.js)",
+      "Bash(awk 'NR==1087||NR==1163||NR==1320||NR==1479||NR==1706||NR==1796||NR==1846||NR==2224||NR==2346||NR==2378||NR==2568||NR==2694||NR==2706||NR==2950 {print NR\": \"$0}' public/app.css)",
+      "Bash(awk 'NR>=1085 && NR<=1090 {print NR\": \"$0}; NR>=1161 && NR<=1166 {print NR\": \"$0}; NR>=1318 && NR<=1322 {print NR\": \"$0}; NR>=1477 && NR<=1481 {print NR\": \"$0}; NR>=1704 && NR<=1708 {print NR\": \"$0}; NR>=1794 && NR<=1798 {print NR\": \"$0}; NR>=1844 && NR<=1848 {print NR\": \"$0}; NR>=2222 && NR<=2226 {print NR\": \"$0}; NR>=2344 && NR<=2348 {print NR\": \"$0}; NR>=2376 && NR<=2380 {print NR\": \"$0}; NR>=2566 && NR<=2570 {print NR\": \"$0}; NR>=2692 && NR<=2696 {print NR\": \"$0}; NR>=2704 && NR<=2708 {print NR\": \"$0}; NR>=2948 && NR<=2952 {print NR\": \"$0}' public/app.css)"
+    ]
+  }
+}

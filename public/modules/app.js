@@ -1,5 +1,5 @@
 import { Utils, State } from "./dom.js";
-import { API, authHeaders } from "./api.js";
+import { API, authHeaders, Nonce } from "./api.js";
 import { UI } from "./ui.js";
 import { swalConfirm, swalAlert, swalPrompt } from "./swal.js";
 import { Editor } from "./editor.js?v=5.4";
@@ -105,6 +105,18 @@ function resetStatusLater(statusKind) {
   setTimeout(() => { if (statusKind !== "err" || !App._restoreInFlight) UI.setStatus(""); }, STATUS_RESET_DELAY_MS);
 }
 
+async function withLoading(fn, errorTitle = null, errorFallback = "Operation failed.") {
+  UI.setStatus("loading");
+  try {
+    const res = await fn();
+    UI.setStatus("ok"); resetStatusLater("ok");
+    return res;
+  } catch (e) {
+    UI.setStatus("err"); resetStatusLater("err");
+    if (errorTitle) swalAlert(errorTitle, e?.message || errorFallback, "error");
+  }
+}
+
 const COLLAPSE_STORAGE_KEY = "enote_collapsed_categories";
 
 const App = {
@@ -142,10 +154,10 @@ const App = {
     const footerYear = Utils.$("footer-year");
     if (footerYear) footerYear.textContent = new Date().getFullYear();
 
-    if (sessionStorage.getItem("session_nonce") && await API.checkAuth().catch(() => false)) {
+    if (Nonce.get() && await API.checkAuth().catch(() => false)) {
       await this.loadView();
     } else {
-      sessionStorage.removeItem("session_nonce");
+      Nonce.clear();
       UI.showAuth();
     }
     document.body.classList.add("ready");
@@ -167,7 +179,7 @@ const App = {
     if (State.view !== "note") this._currentNote = this._notePathHint = null;
 
     applyActiveView(this._views, State.view);
-    UI.renderBreadcrumb();
+    UI.renderBreadcrumb(this._breadcrumbContext());
 
     const backBtn = Utils.$("btn-header-back");
     if (backBtn) { backBtn.classList.toggle("visible", State.view !== "index"); backBtn.disabled = State.view === "index"; }
@@ -350,12 +362,25 @@ const App = {
     return this._currentNote;
   },
 
+  _breadcrumbContext() {
+    return {
+      view: State.view,
+      category: State.category,
+      subcategory: State.subcategory,
+      q: State.q,
+      tag: State.tag,
+      currentNote: this._currentNote,
+      notePathHint: this._notePathHint,
+      onNavigate: (next) => this.route(next)
+    };
+  },
+
   async _loadNote() {
     const el = Utils.$("note-detail");
     if (!el) return;
     const id = String(State.note || "").trim();
     if (this._currentNote?.id === id) {
-      UI.renderBreadcrumb(); el.innerHTML = this._renderNoteDetail(this._currentNote); this._renderFolderTree();
+      UI.renderBreadcrumb(this._breadcrumbContext()); el.innerHTML = this._renderNoteDetail(this._currentNote); this._renderFolderTree();
     } else el.innerHTML = '<div class="loading-hint">Loading...</div>';
 
     const note = await API.req("list", { id });
@@ -363,7 +388,7 @@ const App = {
 
     if (!note?.id) { el.innerHTML = '<div class="loading-hint">Note not found.</div>'; this._currentNote = null; return; }
     this.primeSavedNote(note);
-    UI.renderBreadcrumb(); el.innerHTML = this._renderNoteDetail(note); this._renderFolderTree();
+    UI.renderBreadcrumb(this._breadcrumbContext()); el.innerHTML = this._renderNoteDetail(note); this._renderFolderTree();
   },
 
   _renderNoteDetail(note) {
@@ -443,17 +468,12 @@ const App = {
     const newName = await swalPrompt(promptTitle, promptMsg, promptLabel, oldName, oldName ? "Rename" : "OK");
     if (!newName || newName === oldName) return;
 
-    UI.setStatus("loading");
-    try {
+    await withLoading(async () => {
       const res = await API.req("folders", { ...params, [method === "PUT" ? "newName" : (params.subcategory !== undefined ? "subcategory" : "category")]: newName }, method);
       this._folderTreeCache = null;
       const nextRoute = routeCallback ? routeCallback(res, newName) : null;
       if (nextRoute) this.route(nextRoute); else await this.loadView();
-      UI.setStatus("ok"); resetStatusLater("ok");
-    } catch (e) {
-      UI.setStatus("err"); resetStatusLater("err");
-      swalAlert(`${oldName ? 'Rename' : 'Create'} Failed`, e?.message || "Operation failed.", "error");
-    }
+    }, `${oldName ? 'Rename' : 'Create'} Failed`);
   },
   async createCategory() { this._handleFolderAction("POST", { category: "" }, "New Category", "Create a top-level folder for your notes.", "Major category", (res) => ({ view: "category", category: res.category, subcategory: "", note: "", q: "", tag: "", page: 1 })); },
   async createSubcategory(override = "") {
@@ -476,16 +496,11 @@ const App = {
 
   async _deleteFolder(params, name, isCategory, successRoute) {
     if (!await swalConfirm(`Delete ${isCategory ? 'Category' : 'Subfolder'}?`, `This will delete "${name}" and all notes inside it.`)) return;
-    UI.setStatus("loading");
-    try {
+    await withLoading(async () => {
       await API.req("folders", params, "DELETE");
       this._invalidateSidebarCaches();
       if (successRoute) this.route(successRoute); else await this.loadView();
-      UI.setStatus("ok"); resetStatusLater("ok");
-    } catch (e) {
-      UI.setStatus("err"); resetStatusLater("err");
-      swalAlert("Delete Failed", e?.message || "Unable to delete folder.", "error");
-    }
+    }, "Delete Failed", "Unable to delete folder.");
   },
   deleteCategoryByEncoded(e) { const c = decodeURIComponent(e || ""); if (c) this._deleteFolder({ category: c }, c, true, State.category === c ? { view: "index", category: "", subcategory: "", note: "", q: "", tag: "", page: 1 } : null); },
   deleteSubcategoryByEncoded(eC, eS) { const c = decodeURIComponent(eC || ""), s = decodeURIComponent(eS || ""); if (c && s) this._deleteFolder({ category: c, subcategory: s }, s, false, State.category === c && State.subcategory === s ? { view: "category", category: c, subcategory: "", note: "", q: "", tag: "", page: 1 } : null); },
@@ -538,17 +553,15 @@ const App = {
   },
   async deleteEntry(id) {
     if (!await swalConfirm("Delete Note?", "This note and its unused local media will be removed.")) return;
-    UI.setStatus("loading");
     const d = Utils.$("note-detail"); if (d) d.innerHTML = '<div class="loading-hint">Loading...</div>';
     document.querySelectorAll(`.archive-row[data-id="${CSS.escape(id)}"]`).forEach(el => el.remove());
-    try {
+    await withLoading(async () => {
       await API.req("delete", { id }, "DELETE");
       this._invalidateSidebarCaches();
       if (State.view === "note" && State.note === id) {
         this.route({ note: "" }, { quiet: true });
       } else await this.loadView({ quiet: true });
-      UI.setStatus("ok"); resetStatusLater("ok");
-    } catch (e) { UI.setStatus("err"); resetStatusLater("err"); }
+    });
   },
 
   changePage(dir) { const n = State.page + dir; if (n >= 1 && n <= State.data.totalPg) this.route({ page: n }); },
@@ -567,7 +580,7 @@ const App = {
       if (file.size > MAX_RESTORE_FILE_BYTES) throw new Error("Backup file too large (max 100MB).");
       await nextFrame();
       const res = await fetch("/api/backup/restore", { method: "POST", headers: authHeaders({ "Content-Type": "application/json", "X-Backup-Upload": "file", "X-Backup-Size": String(file.size) }), body: file, credentials: "include", cache: "no-store" });
-      if (res.status === 401) { sessionStorage.removeItem("session_nonce"); UI.showAuth(); throw new Error("Unauthorized"); }
+      if (res.status === 401) { Nonce.clear(); UI.showAuth(); throw new Error("Unauthorized"); }
       showRestoreMessage("info", "Restoring backup...");
       const payload = (res.headers.get("content-type") || "").toLowerCase().includes("application/json") ? await res.json().catch(() => null) : { error: await res.text().catch(() => "") };
       if (!res.ok) throw new Error(payload?.error || "Restore failed.");
@@ -585,7 +598,7 @@ const App = {
     try {
       const cat = Utils.$("backup-category")?.value?.trim() === '(All Categories)' ? '' : Utils.$("backup-category")?.value?.trim() || "";
       const res = await fetch(`/api/backup/export${cat ? `?category=${encodeURIComponent(cat)}` : ""}`, { headers: authHeaders() });
-      if (res.status === 401) { sessionStorage.removeItem("session_nonce"); UI.showAuth(); throw new Error("Unauthorized"); }
+      if (res.status === 401) { Nonce.clear(); UI.showAuth(); throw new Error("Unauthorized"); }
       if (!res.ok) throw new Error((await res.json().catch(() => { })).error || "Download failed");
       await saveResponseToFile(res, getDownloadFilename(res.headers.get("content-disposition") || ""));
       UI.setStatus("");
@@ -608,7 +621,7 @@ const App = {
   },
 
   _setupHtmxListeners() {
-    document.addEventListener("htmx:configRequest", e => { const nonce = sessionStorage.getItem("session_nonce"); if (nonce) e.detail.headers["X-Session-Nonce"] = nonce; });
+    document.addEventListener("htmx:configRequest", e => { const nonce = Nonce.get(); if (nonce) e.detail.headers["X-Session-Nonce"] = nonce; });
     document.addEventListener("htmx:beforeRequest", e => { if (e.target.id !== "auth-form") UI.setStatus("loading"); });
     document.addEventListener("change", async e => {
       const inp = e.target;

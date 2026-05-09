@@ -12,9 +12,7 @@ import { ToolbarPlugin } from './editor-toolbar.js?v=5.4';
 
 const SEL = { header: '.d-item-header', text: '.dc-text', actions: '.item-actions', readMore: '.btn-read-more' };
 
-function toggleDisplay(el, condition) {
-    if (el) el.style.display = condition ? '' : 'none';
-}
+const toggleDisplay = Utils.toggleView;
 
 function normalizeTagInput(value) {
     const arr = Array.isArray(value) ? value : String(value || '').split(',');

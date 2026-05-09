@@ -1,8 +1,19 @@
 import { UI } from './ui.js';
 
+let _nonce = sessionStorage.getItem('session_nonce') || null;
+
+export const Nonce = {
+    get() { return _nonce; },
+    set(v) {
+        _nonce = v || null;
+        if (v) sessionStorage.setItem('session_nonce', v);
+        else sessionStorage.removeItem('session_nonce');
+    },
+    clear() { _nonce = null; sessionStorage.removeItem('session_nonce'); }
+};
+
 export function authHeaders(extra = {}) {
-    const nonce = sessionStorage.getItem('session_nonce');
-    return nonce ? { 'X-Session-Nonce': nonce, ...extra } : { ...extra };
+    return _nonce ? { 'X-Session-Nonce': _nonce, ...extra } : { ...extra };
 }
 
 function buildApiUrl(endpoint, data = {}) {
@@ -15,7 +26,7 @@ function buildApiUrl(endpoint, data = {}) {
 
 async function handleUnauthorized(res, payload) {
     if (res.status !== 401) return;
-    sessionStorage.removeItem('session_nonce');
+    Nonce.clear();
     UI.showAuth();
     const err = new Error(payload?.error || 'Unauthorized');
     err.code = 'UNAUTHORIZED';
