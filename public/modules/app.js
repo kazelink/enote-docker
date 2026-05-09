@@ -192,6 +192,18 @@ const App = {
     Utils.$("btn-search-toggle")?.classList.toggle("active", this._searchPanelOpen || !!State.q);
     Utils.$("global-note-tools")?.classList.toggle("active", State.view !== "backup" && (this._searchPanelOpen || !!State.q));
 
+    if (State.view === "note") {
+      const el = Utils.$("note-detail");
+      const id = String(State.note || "").trim();
+      if (el) {
+        if (this._currentNote?.id === id) {
+          el.innerHTML = this._renderNoteDetail(this._currentNote);
+        } else {
+          el.innerHTML = '<div class="loading-hint">Loading...</div>';
+        }
+      }
+    }
+
     if (State.view === "backup") {
       try {
         await this._loadFolderTree();
