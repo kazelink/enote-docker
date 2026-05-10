@@ -1,9 +1,21 @@
 import { UI } from './ui.js';
 
+let memNonce = null;
+
+// 必须保留此对象，否则 auth.js 里的 Nonce.set 会报错导致死循环
 export const Nonce = {
-    get() { try { return sessionStorage.getItem('session_nonce'); } catch(e) { return null; } },
-    set(val) { try { sessionStorage.setItem('session_nonce', val); } catch(e) {} },
-    clear() { try { sessionStorage.removeItem('session_nonce'); } catch(e) {} }
+    get() { 
+        try { return sessionStorage.getItem('session_nonce') || memNonce; } 
+        catch(e) { return memNonce; } 
+    },
+    set(val) { 
+        memNonce = val; 
+        try { sessionStorage.setItem('session_nonce', val); } catch(e) {} 
+    },
+    clear() { 
+        memNonce = null; 
+        try { sessionStorage.removeItem('session_nonce'); } catch(e) {} 
+    }
 };
 
 export function authHeaders(extra = {}) {
@@ -21,7 +33,7 @@ function buildApiUrl(endpoint, data = {}) {
 
 async function handleUnauthorized(res, payload) {
     if (res.status !== 401) return;
-    Nonce.clear(); 
+    Nonce.clear();
     UI.showAuth();
     const err = new Error(payload?.error || 'Unauthorized');
     err.code = 'UNAUTHORIZED';
