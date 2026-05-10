@@ -1,6 +1,6 @@
 import { Utils, RI_SVGS } from './dom.js';
 import { UI } from './ui.js';
-import { Nonce } from './api.js';
+import { Nonce, Token } from './api.js';
 
 export const Auth = {
     init() {
@@ -29,8 +29,12 @@ export const Auth = {
             }
         });
 
-        document.body.addEventListener('loginSuccess', async e => {
-            if (e.detail?.nonce) Nonce.set(e.detail.nonce);
+        // Server returns nonce + JWT as data-* attributes on the swapped <div class="auth-ok">.
+        // Trigger fires after swap (HX-Trigger-After-Swap), so the element is already in the DOM.
+        document.body.addEventListener('loginSuccess', async () => {
+            const okEl = Utils.$('auth-messages')?.querySelector('.auth-ok');
+            if (okEl?.dataset?.nonce) Nonce.set(okEl.dataset.nonce);
+            if (okEl?.dataset?.token) Token.set(okEl.dataset.token);
             if (btn) {
                 btn.innerHTML = '<i class="ri-check-line" style="font-size:24px"></i>';
                 btn.style.background = 'var(--success)';
@@ -38,7 +42,6 @@ export const Auth = {
             if (msg) msg.innerHTML = '';
             UI.hideAuth();
 
-            // If editor is hidden, reload view. If open, user creates/edits entry, so don't reload.
             if (Utils.$('editor-wrapper-dom')?.style.display === 'none') await window.App?.loadView();
         });
     }

@@ -1,5 +1,5 @@
 import { Utils, State } from "./dom.js";
-import { API, authHeaders, Nonce } from "./api.js";
+import { API, authHeaders, Nonce, Token } from "./api.js";
 import { UI } from "./ui.js";
 import { swalConfirm, swalAlert, swalPrompt } from "./swal.js";
 import { Editor } from "./editor.js?v=5.4";
@@ -143,25 +143,34 @@ const App = {
   },
 
   async init() {
-    Auth.init(); Editor.init();
-    Editor.bindSuggestion(Utils.$("backup-category"), "category");
-    this._loadCollapsedState();['index', 'category', 'list', 'note', 'backup'].forEach(v => this._views[v] = Utils.$(`v-${v}`));
-    window.App = this;
-    this._setupHtmxListeners();
-    this._setupTreeContextMenu();
-    UI.initGlobalEvents();
+    try {
+      Auth.init(); Editor.init();
+      Editor.bindSuggestion(Utils.$("backup-category"), "category");
+      this._loadCollapsedState();['index', 'category', 'list', 'note', 'backup'].forEach(v => this._views[v] = Utils.$(`v-${v}`));
+      window.App = this;
+      this._setupHtmxListeners();
+      this._setupTreeContextMenu();
+      UI.initGlobalEvents();
 
-    const footerYear = Utils.$("footer-year");
-    if (footerYear) footerYear.textContent = new Date().getFullYear();
+      const footerYear = Utils.$("footer-year");
+      if (footerYear) footerYear.textContent = new Date().getFullYear();
 
-    if (Nonce.get() && await API.checkAuth().catch(() => false)) {
-      await this.loadView();
-    } else {
-      Nonce.clear();
-      UI.showAuth();
+      if (Nonce.get() && Token.get() && await API.checkAuth().catch(() => false)) {
+        await this.loadView();
+      } else {
+        Nonce.clear();
+        Token.clear();
+        UI.showAuth();
+      }
+      if (!this._popstateHandler) window.addEventListener("popstate", (this._popstateHandler = () => this.loadView()));
+    } catch (e) {
+      console.error("App init failed:", e);
+      try { UI.showAuth(); } catch (_) {}
+      const msg = Utils.$("auth-messages");
+      if (msg) msg.innerHTML = `<div class="auth-err">INIT ERROR: ${String(e?.message || e).replace(/[<>]/g, '')}</div>`;
+    } finally {
+      document.body.classList.add("ready");
     }
-    document.body.classList.add("ready");
-    if (!this._popstateHandler) window.addEventListener("popstate", (this._popstateHandler = () => this.loadView()));
   },
 
   async route(nextState, options = {}) {
@@ -592,7 +601,7 @@ const App = {
       if (file.size > MAX_RESTORE_FILE_BYTES) throw new Error("Backup file too large (max 100MB).");
       await nextFrame();
       const res = await fetch("/api/backup/restore", { method: "POST", headers: authHeaders({ "Content-Type": "application/json", "X-Backup-Upload": "file", "X-Backup-Size": String(file.size) }), body: file, credentials: "include", cache: "no-store" });
-      if (res.status === 401) { Nonce.clear(); UI.showAuth(); throw new Error("Unauthorized"); }
+      if (res.status === 401) { Nonce.clear(); Token.clear(); UI.showAuth(); throw new Error("Unauthorized"); }
       showRestoreMessage("info", "Restoring backup...");
       const payload = (res.headers.get("content-type") || "").toLowerCase().includes("application/json") ? await res.json().catch(() => null) : { error: await res.text().catch(() => "") };
       if (!res.ok) throw new Error(payload?.error || "Restore failed.");
@@ -610,7 +619,7 @@ const App = {
     try {
       const cat = Utils.$("backup-category")?.value?.trim() === '(All Categories)' ? '' : Utils.$("backup-category")?.value?.trim() || "";
       const res = await fetch(`/api/backup/export${cat ? `?category=${encodeURIComponent(cat)}` : ""}`, { headers: authHeaders() });
-      if (res.status === 401) { Nonce.clear(); UI.showAuth(); throw new Error("Unauthorized"); }
+      if (res.status === 401) { Nonce.clear(); Token.clear(); UI.showAuth(); throw new Error("Unauthorized"); }
       if (!res.ok) throw new Error((await res.json().catch(() => { })).error || "Download failed");
       await saveResponseToFile(res, getDownloadFilename(res.headers.get("content-disposition") || ""));
       UI.setStatus("");

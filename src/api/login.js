@@ -100,20 +100,25 @@ router.post('/', async (c) => {
     const token = await signToken(process.env.JWT_SECRET, nonce);
     
     await ensureSchema().catch(err => console.error('ensureSchema error after login:', err));
-    
+
+    const forwardedProto = (c.req.header('x-forwarded-proto') || '').split(',')[0].trim().toLowerCase();
+    const isHttps = forwardedProto
+      ? forwardedProto === 'https'
+      : (() => { try { return new URL(c.req.url).protocol === 'https:'; } catch { return false; } })();
+
     setCookie(c, 'enote_auth', token, {
       path: '/',
       httpOnly: true,
-      secure: false,
+      secure: isHttps,
       sameSite: 'Lax',
       maxAge: 7 * 24 * 60 * 60
     });
 
     if (c.req.header('HX-Request')) {
-      c.header('HX-Trigger', JSON.stringify({ loginSuccess: { nonce } }));
-      return c.html('<div class="auth-ok"></div>');
+      c.header('HX-Trigger-After-Swap', JSON.stringify({ loginSuccess: {} }));
+      return c.html(`<div class="auth-ok" data-nonce="${nonce}" data-token="${token}"></div>`);
     }
-    return c.json({ success: true, nonce });
+    return c.json({ success: true, nonce, token });
   } catch {
     return respondError(c, 'Crypto Error', 500);
   }
