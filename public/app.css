@@ -880,7 +880,7 @@ input[type=number] {
 .folder-tree-shell {
     display: block;
     padding-top: 8px;
-    padding-right: 4px;
+    padding-right: 7px;
     max-height: calc(100vh - 160px);
     overflow-y: auto;
     scrollbar-width: none;
@@ -3049,9 +3049,12 @@ body.swal2-height-auto {
     }
 }
 
-.workspace-side,
+.workspace-side {
+    overflow-x: hidden !important;
+    overscroll-behavior-x: none !important;
+}
+
 .folder-tree-shell,
 .folder-tree {
-    overflow-x: hidden !important;
     overscroll-behavior-x: none !important;
 }
