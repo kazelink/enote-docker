@@ -3049,6 +3049,9 @@ body.swal2-height-auto {
     }
 }
 
-/* ==========================================================================
-   13. Tree Context Menu — merged into Section 6
-   ========================================================================== */
+.workspace-side,
+.folder-tree-shell,
+.folder-tree {
+    overflow-x: hidden !important;
+    overscroll-behavior-x: none !important;
+}
