@@ -304,7 +304,8 @@ const App = {
 
     const chipsHtml = visibleRows.map(r => {
       const tag = String(r?.tag || "").trim();
-      return tag ? `<button class="tag-cloud-chip${activeTag === tag ? " active" : ""}" type="button" onclick="App.openSidebarTagByEncoded('${encodeInlineParam(tag)}')">#${escapeHtml(tag)}</button>` : "";
+      const enc = encodeInlineParam(tag);
+      return tag ? `<button class="tag-cloud-chip${activeTag === tag ? " active" : ""}" type="button" onclick="App.openSidebarTagByEncoded('${enc}')" oncontextmenu="return App.openTreeContextMenu(event, 'tag', '', '', '${enc}')">#${escapeHtml(tag)}</button>` : "";
     }).join("");
 
     const footerMarkup = hasOverflow ? `<div class="tag-cloud-footer"><button class="tag-cloud-more${this._tagCloudExpanded ? " is-expanded" : ""}" type="button" aria-label="${this._tagCloudExpanded ? "Show fewer tags" : "Show more tags"}" onclick="App.toggleTagCloudExpanded()"><i class="ri-arrow-right-s-line"></i></button></div>` : "";
@@ -440,21 +441,34 @@ const App = {
     window.addEventListener("resize", () => this.closeTreeContextMenu());
   },
 
-  openTreeContextMenu(event, scope = "root", encodedCategory = "", encodedSubcategory = "") {
+  openTreeContextMenu(event, scope = "root", encodedCategory = "", encodedSubcategory = "", encodedTag = "") {
     event.preventDefault(); event.stopPropagation();
-    const menu = Utils.$("tree-context-menu"), subBtn = Utils.$("tree-context-subfolder"), renBtn = Utils.$("tree-context-rename");
+    const menu = Utils.$("tree-context-menu");
+    const newCatBtn = Utils.$("tree-context-new-category");
+    const subBtn = Utils.$("tree-context-subfolder");
+    const renBtn = Utils.$("tree-context-rename");
     if (!menu || !subBtn) return false;
 
-    const category = decodeURIComponent(encodedCategory || ""), subcategory = decodeURIComponent(encodedSubcategory || "");
-    this._treeContextState = { scope, category, subcategory };
+    const category = decodeURIComponent(encodedCategory || "");
+    const subcategory = decodeURIComponent(encodedSubcategory || "");
+    const tag = decodeURIComponent(encodedTag || "");
+    this._treeContextState = { scope, category, subcategory, tag };
 
-    if (scope === "root") {
-      subBtn.style.display = "none"; if (renBtn) renBtn.style.display = "none";
-    } else {
-      subBtn.style.display = scope === "category" ? "flex" : "none";
-      subBtn.textContent = `NEW SUBFOLDER IN ${category || "CATEGORY"}`;
+    if (newCatBtn) newCatBtn.style.display = scope === "tag" ? "none" : "flex";
+    subBtn.style.display = "none";
+    if (renBtn) renBtn.style.display = "none";
+
+    if (scope === "category" || scope === "subcategory") {
+      if (scope === "category") {
+        subBtn.style.display = "flex";
+        subBtn.textContent = `NEW SUBFOLDER IN ${category || "CATEGORY"}`;
+      }
       if (renBtn) { renBtn.style.display = "flex"; renBtn.textContent = `RENAME ${scope === "category" ? category : subcategory}`; }
+    } else if (scope === "tag" && renBtn) {
+      renBtn.style.display = "flex";
+      renBtn.textContent = `RENAME #${tag}`;
     }
+
     menu.style.display = "flex";
     requestAnimationFrame(() => {
       menu.style.left = `${Math.min(event.clientX, Math.max(8, window.innerWidth - menu.offsetWidth - 8))}px`;
@@ -504,7 +518,20 @@ const App = {
   createCategoryFromContextMenu() { this.createCategory(); },
   createSubcategoryFromContextMenu() { const c = String(this._treeContextState?.category || "").trim(); if (c) this.createSubcategory(c); },
   async renameFromContextMenu() {
-    const { scope, category, subcategory } = this._treeContextState;
+    const { scope, category, subcategory, tag } = this._treeContextState;
+    if (scope === "tag") {
+      this.closeTreeContextMenu();
+      if (!tag) return;
+      const newName = await swalPrompt("Rename Tag", `Enter a new name for "#${tag}"`, "", tag, "Rename");
+      if (!newName || newName === tag) return;
+      await withLoading(async () => {
+        await API.req("tags", { oldName: tag, newName }, "PUT");
+        this._invalidateSidebarCaches();
+        if (String(State.tag || "") === tag) this.route({ tag: newName });
+        else await this.loadView();
+      }, "Rename Failed");
+      return;
+    }
     if (!category) return;
     const isCat = scope === "category", oldName = isCat ? category : subcategory;
     this._handleFolderAction("PUT", { oldCategory: category, oldSubcategory: isCat ? "" : subcategory }, "Rename", `Enter a new name for "${oldName}"`, "", (res, newName) => {
