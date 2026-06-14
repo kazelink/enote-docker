@@ -1,7 +1,6 @@
 import { Utils } from './dom.js';
 
 export const ImagePlugin = {
-    sq: null,
     wrapper: null,
     currImg: null,
     _imgToolbar: null,
@@ -10,7 +9,6 @@ export const ImagePlugin = {
     isResizing: false,
 
     init(sq, wrapper, imgToolbar, onChange) {
-        this.sq = sq;
         this.wrapper = wrapper;
         this._imgToolbar = imgToolbar;
         this._onChange = onChange;
@@ -62,7 +60,7 @@ export const ImagePlugin = {
         if (this._imgToolbar) this._imgToolbar.classList.remove('show');
     },
 
-    toggleCenter(sq) {
+    toggleCenter() {
         const parent = this.currImg?.parentElement;
         if (!parent) return;
         parent.style.textAlign = parent.style.textAlign === 'center' ? 'left' : 'center';

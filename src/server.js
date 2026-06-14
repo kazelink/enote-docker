@@ -22,8 +22,15 @@ async function startup() {
     mainApp.use('/*', async (c, next) => {
         await next();
         const p = c.req.path;
-        if (/\.(woff2?|ttf|eot|svg|png|jpe?g|gif|webp|ico|css|js|mjs)$/i.test(p) || p.startsWith('/assets/')) {
+        // Long-immutable for fonts/images/css that are versioned via filename or rarely change.
+        if (/\.(woff2?|ttf|eot|svg|png|jpe?g|gif|webp|ico|css)$/i.test(p) || p.startsWith('/assets/')) {
             c.header('Cache-Control', 'public, max-age=31536000, immutable');
+        }
+        // JS modules: never immutable. ES module graphs share state by URL, and stale cached
+        // modules cause hard-to-debug "missing export" failures when any module's shape changes.
+        // Allow short caching with mandatory revalidation so updates roll out reliably.
+        else if (/\.(js|mjs)$/i.test(p)) {
+            c.header('Cache-Control', 'no-cache');
         }
         else if (p.endsWith('.html') || p === '/') {
             c.header('Cache-Control', 'no-cache');

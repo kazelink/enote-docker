@@ -8,27 +8,12 @@ import { respondError } from '../lib/utils.js';
 
 const router = new Hono();
 
-// In-memory rate limiting is acceptable here because the app is personal and
-// isolate recycling only weakens brute-force protection temporarily.
 const loginLimits = new Map();
-
-function cleanupStaleLimits() {
-  const now = Date.now();
-  for (const [ip, record] of loginLimits.entries()) {
-    if (!record?.lastFailAt || now - record.lastFailAt > CONFIG.LOGIN.LOCK_MS) {
-      loginLimits.delete(ip);
-    }
-  }
-}
-
-const cleanupTimer = setInterval(cleanupStaleLimits, 10 * 60 * 1000);
-cleanupTimer.unref?.();
 
 function getLimit(ip) {
   const record = loginLimits.get(ip);
   if (!record) return null;
 
-  // Drop stale records automatically.
   if (Date.now() - record.lastFailAt > CONFIG.LOGIN.LOCK_MS) {
     loginLimits.delete(ip);
     return null;
@@ -51,10 +36,9 @@ function clearLimit(ip) {
   loginLimits.delete(ip);
 }
 
-// Constant-time comparison via SHA-256 fixed-length digests.
 async function timingSafeEqual(a, b) {
   const encoder = new TextEncoder();
-  const [hashA, hashB] = await Promise.all([
+  const[hashA, hashB] = await Promise.all([
     crypto.subtle.digest('SHA-256', encoder.encode(a)),
     crypto.subtle.digest('SHA-256', encoder.encode(b))
   ]);
@@ -116,20 +100,25 @@ router.post('/', async (c) => {
     const token = await signToken(process.env.JWT_SECRET, nonce);
     
     await ensureSchema().catch(err => console.error('ensureSchema error after login:', err));
-    
+
+    const forwardedProto = (c.req.header('x-forwarded-proto') || '').split(',')[0].trim().toLowerCase();
+    const isHttps = forwardedProto
+      ? forwardedProto === 'https'
+      : (() => { try { return new URL(c.req.url).protocol === 'https:'; } catch { return false; } })();
+
     setCookie(c, 'enote_auth', token, {
       path: '/',
       httpOnly: true,
-      secure: false,
+      secure: isHttps,
       sameSite: 'Lax',
       maxAge: 7 * 24 * 60 * 60
     });
 
     if (c.req.header('HX-Request')) {
-      c.header('HX-Trigger', JSON.stringify({ loginSuccess: { nonce } }));
-      return c.html('<div class="auth-ok"></div>');
+      c.header('HX-Trigger-After-Swap', JSON.stringify({ loginSuccess: {} }));
+      return c.html(`<div class="auth-ok" data-nonce="${nonce}" data-token="${token}"></div>`);
     }
-    return c.json({ success: true, nonce });
+    return c.json({ success: true, nonce, token });
   } catch {
     return respondError(c, 'Crypto Error', 500);
   }

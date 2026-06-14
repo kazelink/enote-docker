@@ -1,8 +1,45 @@
 import { UI } from './ui.js';
 
+let memNonce = null;
+let memToken = null;
+
+export const Nonce = {
+    get() {
+        try { return sessionStorage.getItem('session_nonce') || memNonce; }
+        catch (e) { return memNonce; }
+    },
+    set(val) {
+        memNonce = val;
+        try { sessionStorage.setItem('session_nonce', val); } catch (e) { }
+    },
+    clear() {
+        memNonce = null;
+        try { sessionStorage.removeItem('session_nonce'); } catch (e) { }
+    }
+};
+
+export const Token = {
+    get() {
+        try { return sessionStorage.getItem('session_token') || memToken; }
+        catch (e) { return memToken; }
+    },
+    set(val) {
+        memToken = val;
+        try { sessionStorage.setItem('session_token', val); } catch (e) { }
+    },
+    clear() {
+        memToken = null;
+        try { sessionStorage.removeItem('session_token'); } catch (e) { }
+    }
+};
+
 export function authHeaders(extra = {}) {
-    const nonce = sessionStorage.getItem('session_nonce');
-    return nonce ? { 'X-Session-Nonce': nonce, ...extra } : { ...extra };
+    const headers = { ...extra };
+    const nonce = Nonce.get();
+    if (nonce) headers['X-Session-Nonce'] = nonce;
+    const token = Token.get();
+    if (token) headers['X-Auth-Token'] = token;
+    return headers;
 }
 
 function buildApiUrl(endpoint, data = {}) {
@@ -15,7 +52,8 @@ function buildApiUrl(endpoint, data = {}) {
 
 async function handleUnauthorized(res, payload) {
     if (res.status !== 401) return;
-    sessionStorage.removeItem('session_nonce');
+    Nonce.clear();
+    Token.clear();
     UI.showAuth();
     const err = new Error(payload?.error || 'Unauthorized');
     err.code = 'UNAUTHORIZED';
@@ -25,7 +63,7 @@ async function handleUnauthorized(res, payload) {
 
 export const API = {
     async checkAuth() {
-        const res = await fetch('/api/auth-status', { headers: authHeaders(), credentials: 'include' });
+        const res = await fetch('/api/auth-status', { headers: authHeaders(), credentials: 'include', cache: 'no-store' });
         return res.ok;
     },
 

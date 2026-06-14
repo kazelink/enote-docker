@@ -141,7 +141,6 @@ function removeList(sq, list) {
 
 export const ToolbarPlugin = {
     sq: null,
-    _toolbar: null,
     _raf: null,
     _onChange: null,
     _docHandler: null,
@@ -149,7 +148,6 @@ export const ToolbarPlugin = {
 
     init(sq, toolbar, onChange) {
         this.sq = sq;
-        this._toolbar = toolbar;
         this._onChange = onChange;
         if (!toolbar) return;
 
@@ -241,7 +239,7 @@ export const ToolbarPlugin = {
 
             case 'justifyCenter': {
                 if (ImagePlugin.currImg) {
-                    ImagePlugin.toggleCenter(sq);
+                    ImagePlugin.toggleCenter();
                 } else {
                     const block = getBlock(sq);
                     const isCentered = block?.style.textAlign === 'center';

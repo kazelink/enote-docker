@@ -40,7 +40,10 @@ export function loadScript(src, timeout = 8000) {
 }
 
 export const Utils = {
-    $: (id) => document.getElementById(id)
+    $: (id) => document.getElementById(id),
+    toggleView(el, isVisible) {
+        if (el) el.style.display = isVisible ? '' : 'none';
+    }
 };
 
 const BLOCK_SELECTOR = 'p, div, h1, h2, blockquote, li';

@@ -13,9 +13,7 @@ import { ToolbarPlugin } from './editor-toolbar.js?v=5.6';
 
 const SEL = { header: '.d-item-header', text: '.dc-text', actions: '.item-actions', readMore: '.btn-read-more' };
 
-function toggleDisplay(el, condition) {
-    if (el) el.style.display = condition ? '' : 'none';
-}
+const toggleDisplay = Utils.toggleView;
 
 function normalizeTagInput(value) {
     const arr = Array.isArray(value) ? value : String(value || '').split(',');
@@ -572,7 +570,6 @@ export const Editor = {
         const el = this.el;
         if (!el.dText || !el.nTitle || !el.nCategory || !el.nSubcategory || !el.nTags || !this.wrapper) return;
 
-        this.wrapper.style.display = 'flex';
         this._setEditorHTML(data.content || '');
         el.nTitle.value = data.title || '';
         el.nCategory.value = data.category || '';
@@ -581,6 +578,8 @@ export const Editor = {
 
         this._setMetaCollapsed(false);
         this._updateMetaStatus(data.updatedAt);
+
+        this.wrapper.style.display = 'flex';
 
         this._openMode = mode === 'new' ? 'new' : (anchorEl ? 'inline-edit' : 'standalone-edit');
         if (el.saveTxt) el.saveTxt.innerText = 'SAVE';
@@ -664,8 +663,10 @@ export const Editor = {
 
     _cleanupContext() {
         this._setEditorHTML('');
+        ['nTitle', 'nCategory', 'nSubcategory', 'nTags'].forEach(k => { if (this.el[k]) this.el[k].value = ''; });
+
         this.wrapper.style.display = 'none';
-        this.wrapper.classList.remove('editor-fullscreen', 'editor-loading', 'editor-in-card', 'editor-in-new');['nTitle', 'nCategory', 'nSubcategory', 'nTags'].forEach(k => { if (this.el[k]) this.el[k].value = ''; });
+        this.wrapper.classList.remove('editor-fullscreen', 'editor-loading', 'editor-in-card', 'editor-in-new');
         this._hideMetaSuggestions();
         this._setMetaCollapsed(false);
         this._updateMetaStatus('');

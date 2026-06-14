@@ -2,17 +2,17 @@ import { getCookie } from 'hono/cookie';
 import { verifyToken } from './jwt.js';
 import { respondError } from './utils.js';
 
-// Full auth requires both the JWT cookie and the session nonce header.
+// Full auth requires the JWT (X-Auth-Token header or cookie) plus the matching session nonce header.
 export async function authMiddleware(c, next) {
     const secret = process.env.JWT_SECRET;
     if (typeof secret !== 'string' || !secret) {
         return respondError(c, 'Server Not Configured', 500);
     }
 
-    // Use Hono's native getCookie() instead of manual regex parsing
-    const token = getCookie(c, 'enote_auth');
+    const headerToken = c.req.header('X-Auth-Token');
+    const token = (headerToken && headerToken.trim()) || getCookie(c, 'enote_auth');
     const nonce = c.req.header('X-Session-Nonce');
-    
+
     if (!token || !nonce) return respondError(c, 'Unauthorized', 401);
 
     const payload = await verifyToken(token, secret);

@@ -1,14 +1,7 @@
 export const ColorPlugin = {
-    sq: null,
-    _btnColor: null,
-    _dropdown: null,
     _docHandler: null,
 
     init(sq, btnColor, dropdown) {
-        this.sq = sq;
-        this._btnColor = btnColor;
-        this._dropdown = dropdown;
-
         if (!btnColor || !dropdown) return;
 
         btnColor.onmousedown = (e) => {
