@@ -3,12 +3,13 @@ import { API } from './api.js';
 import { UI } from './ui.js';
 import { swalAlert, swalUnsaved } from './swal.js';
 import { Upload } from './upload.js';
-import { sanitizePastedHtml } from './paste.js?v=5.3';
+import { sanitizePastedHtml } from './paste.js?v=5.5';
 import Squire from '../assets/squire.mjs';
 import { IndentPlugin } from './editor-indent.js?v=5.4';
 import { ImagePlugin } from './editor-image.js';
 import { ColorPlugin } from './editor-color.js';
-import { ToolbarPlugin } from './editor-toolbar.js?v=5.4';
+import { TablePlugin } from './editor-table.js?v=5.5';
+import { ToolbarPlugin } from './editor-toolbar.js?v=5.6';
 
 const SEL = { header: '.d-item-header', text: '.dc-text', actions: '.item-actions', readMore: '.btn-read-more' };
 
@@ -31,7 +32,7 @@ function isEmptyEditorHtml(html) {
     const template = document.createElement('template');
     template.innerHTML = String(html || '');
     const root = template.content;
-    return !root.textContent.trim() && !root.querySelector('img, video, hr');
+    return !root.textContent.trim() && !root.querySelector('img, video, hr, table');
 }
 
 export const Editor = {
@@ -86,6 +87,7 @@ export const Editor = {
         });
 
         IndentPlugin.init(this.sq);
+        TablePlugin.init(this.sq);
         ImagePlugin.init(this.sq, this.wrapper, this.el.imgToolbar, () => this._triggerInput?.());
         ColorPlugin.init(this.sq, this.el.btnColor, this.el.colorDropdown);
         ToolbarPlugin.init(this.sq, this.el.toolbar, () => this._triggerInput?.());
@@ -559,7 +561,7 @@ export const Editor = {
 
     hasContent() {
         const { dText, nTitle } = this.el;
-        return !!(nTitle?.value.trim() || dText?.innerText.trim() || dText?.querySelector('img, video'));
+        return !!(nTitle?.value.trim() || dText?.innerText.trim() || dText?.querySelector('img, video, hr, table'));
     },
 
     async open(mode, data = {}, anchorEl) {

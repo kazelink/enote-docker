@@ -1,7 +1,8 @@
 const ALLOWED_TAGS = new Set([
     'p', 'div', 'h1', 'h2', 'blockquote', 'hr', 'br',
     'span', 'b', 'strong', 'i', 'em', 'u', 's', 'code', 'pre',
-    'ul', 'ol', 'li', 'a', 'img', 'video'
+    'ul', 'ol', 'li', 'a', 'img', 'video',
+    'table', 'thead', 'tbody', 'tfoot', 'tr', 'th', 'td', 'caption'
 ]);
 
 const STRIP_WITH_CONTENT = new Set([
@@ -9,9 +10,12 @@ const STRIP_WITH_CONTENT = new Set([
     'template', 'noscript', 'form', 'base', 'link', 'meta'
 ]);
 
-const BLOCK_ALIGN_TAGS = new Set(['p', 'div', 'h1', 'h2', 'blockquote', 'ul', 'ol', 'li']);
+const BLOCK_ALIGN_TAGS = new Set(['p', 'div', 'h1', 'h2', 'blockquote', 'ul', 'ol', 'li', 'th', 'td', 'caption']);
 const INDENT_TAGS = new Set(['p', 'div', 'h1', 'h2', 'blockquote', 'ul', 'ol', 'li']);
 const ALIGN_VALUES = new Set(['left', 'center', 'right', 'justify']);
+const TABLE_SCOPE_VALUES = new Set(['row', 'col', 'rowgroup', 'colgroup']);
+const DIVIDER_TEXT = '----------';
+const DIVIDER_CLASS = 'text-divider';
 const SAFE_COLOR_RE = /^(#[0-9a-f]{3,8}|rgb(a)?\(\s*[\d.\s,%]+\)|hsl(a)?\(\s*[\d.\s,%]+\)|[a-z]{1,20}|var\(\s*--[a-z0-9_-]+\s*(,\s*(#[0-9a-f]{3,8}|rgb(a)?\(\s*[\d.\s,%]+\)|hsl(a)?\(\s*[\d.\s,%]+\)))?\s*\))$/i;
 const SAFE_DATA_IMAGE_RE = /^data:image\/(?:png|jpe?g|gif|webp);base64,[a-z0-9+/=\s]+$/i;
 
@@ -66,9 +70,20 @@ function sanitizeClass(tag, value) {
     if (typeof value !== 'string') return '';
     const classes = value.split(/\s+/).filter(Boolean);
     if (INDENT_TAGS.has(tag)) {
-        return classes.includes('indent') ? 'indent' : '';
+        return [
+            classes.includes('indent') ? 'indent' : '',
+            tag === 'p' && classes.includes(DIVIDER_CLASS) ? DIVIDER_CLASS : ''
+        ].filter(Boolean).join(' ');
     }
     return '';
+}
+
+function replaceHrWithTextDivider(el) {
+    const divider = el.ownerDocument.createElement('p');
+    divider.className = DIVIDER_CLASS;
+    divider.style.textAlign = 'center';
+    divider.textContent = DIVIDER_TEXT;
+    el.replaceWith(divider);
 }
 
 function sanitizeStyle(tag, styleMap) {
@@ -94,6 +109,11 @@ function sanitizeStyle(tag, styleMap) {
     }
 
     return safeRules.join(';');
+}
+
+function sanitizeSpanAttribute(value) {
+    const numeric = parseInt(String(value || '').trim(), 10);
+    return Number.isInteger(numeric) && numeric >= 1 && numeric <= 20 ? String(numeric) : '';
 }
 
 function isBoldWeight(value) {
@@ -160,6 +180,9 @@ function sanitizeAllowedElement(el, tag, styleMap) {
     const rawTarget = String(el.getAttribute('target') || '').toLowerCase();
     const rawTitle = el.getAttribute('title');
     const rawAlt = el.getAttribute('alt');
+    const rawColspan = el.getAttribute('colspan');
+    const rawRowspan = el.getAttribute('rowspan');
+    const rawScope = String(el.getAttribute('scope') || '').toLowerCase();
 
     if (rawClass) {
         const safeClass = sanitizeClass(tag, rawClass);
@@ -201,6 +224,14 @@ function sanitizeAllowedElement(el, tag, styleMap) {
         nextAttrs.set('preload', 'none');
     }
 
+    if (tag === 'td' || tag === 'th') {
+        const colspan = sanitizeSpanAttribute(rawColspan);
+        const rowspan = sanitizeSpanAttribute(rawRowspan);
+        if (colspan) nextAttrs.set('colspan', colspan);
+        if (rowspan) nextAttrs.set('rowspan', rowspan);
+        if (tag === 'th' && TABLE_SCOPE_VALUES.has(rawScope)) nextAttrs.set('scope', rawScope);
+    }
+
     for (const attr of Array.from(el.attributes)) {
         el.removeAttribute(attr.name);
     }
@@ -228,6 +259,11 @@ function sanitizeNode(node) {
 
     if (STRIP_WITH_CONTENT.has(tag)) {
         el.remove();
+        return;
+    }
+
+    if (tag === 'hr') {
+        replaceHrWithTextDivider(el);
         return;
     }
 

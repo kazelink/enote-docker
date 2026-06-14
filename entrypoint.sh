@@ -9,13 +9,18 @@ DB_FILE=$(basename "$DB_PATH")
 
 mkdir -p "$DB_DIR" "$STORAGE_PATH" "$STORAGE_PATH/tmp"
 
-chown enote:enote "$DB_DIR" "$STORAGE_PATH" "$STORAGE_PATH/tmp"
-
-if [ -d "$STORAGE_PATH/backups" ]; then
-    chown enote:enote "$STORAGE_PATH/backups"
+# Only chown if running as root (not when already as enote user)
+if [ "$(id -u)" -eq 0 ]; then
+    chown enote:enote "$DB_DIR" "$STORAGE_PATH" "$STORAGE_PATH/tmp"
+    
+    if [ -d "$STORAGE_PATH/backups" ]; then
+        chown enote:enote "$STORAGE_PATH/backups"
+    fi
+    
+    find "$DB_DIR" -maxdepth 1 -type f \( -name "$DB_FILE" -o -name "$DB_FILE-*" \) -exec chown enote:enote {} +
+    find "$STORAGE_PATH" -maxdepth 1 -mindepth 1 -type d -exec chown enote:enote {} +
+    
+    exec su-exec enote node src/server.js
+else
+    exec node src/server.js
 fi
-
-find "$DB_DIR" -maxdepth 1 -type f \( -name "$DB_FILE" -o -name "$DB_FILE-*" \) -exec chown enote:enote {} +
-find "$STORAGE_PATH" -maxdepth 1 -mindepth 1 -type d -exec chown enote:enote {} +
-
-exec su-exec enote node src/server.js

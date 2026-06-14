@@ -1,8 +1,11 @@
 import { Utils, getBlockFromRange } from './dom.js';
 import { IndentPlugin }    from './editor-indent.js?v=5.4';
 import { ImagePlugin }     from './editor-image.js';
+import { TablePlugin }     from './editor-table.js?v=5.5';
 
 const HEADING_BLOCKS = new Set(['P', 'DIV', 'H1', 'H2', 'BLOCKQUOTE']);
+const DIVIDER_TEXT = '----------';
+const DIVIDER_CLASS = 'text-divider';
 
 function getBlock(sq) {
     return getBlockFromRange(sq.getSelection(), sq.getRoot());
@@ -26,6 +29,60 @@ function ensureValidSelection(sq) {
     r.setStart(root.firstChild || root, 0);
     r.collapse(true);
     sq.setSelection(r);
+}
+
+function getTopLevelNodeFromRange(range, root) {
+    let node = range.startContainer;
+    if (node.nodeType === 3) node = node.parentNode;
+    if (!node || node === root) return root.lastChild || null;
+
+    while (node.parentNode && node.parentNode !== root) {
+        node = node.parentNode;
+    }
+    return root.contains(node) ? node : null;
+}
+
+function isEmptyBlock(node) {
+    return !!node
+        && /^(P|DIV)$/i.test(node.nodeName)
+        && !node.textContent.trim()
+        && !node.querySelector('img, video, table, hr');
+}
+
+function setCursorAtEnd(sq, node) {
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    range.collapse(false);
+    sq.setSelection(range);
+    sq._updatePath?.(range, true);
+}
+
+function insertTextDivider(sq) {
+    ensureValidSelection(sq);
+
+    const root = sq.getRoot();
+    const doc = root.ownerDocument;
+    const range = sq.getSelection();
+    const anchor = getTopLevelNodeFromRange(range, root);
+    const divider = doc.createElement('p');
+
+    divider.className = DIVIDER_CLASS;
+    divider.style.textAlign = 'center';
+    divider.textContent = DIVIDER_TEXT;
+
+    sq.saveUndoState(range);
+
+    if (anchor && root.children.length === 1 && isEmptyBlock(anchor)) {
+        root.replaceChild(divider, anchor);
+    } else if (anchor && anchor.parentNode === root) {
+        root.insertBefore(divider, anchor.nextSibling);
+    } else {
+        root.appendChild(divider);
+    }
+
+    sq._docWasChanged();
+    sq.focus();
+    setCursorAtEnd(sq, divider);
 }
 
 function toggleHeading(sq, tag) {
@@ -107,6 +164,8 @@ export const ToolbarPlugin = {
             center:     Utils.$('btn-center'),
             justify:    Utils.$('btn-justify'),
             indent:     toolbar.querySelector('[data-cmd="indentClass"]'),
+            table:      Utils.$('btn-table'),
+            tableContext: Array.from(toolbar.querySelectorAll('[data-table-context]')),
         };
 
         const moreWrapper = toolbar.querySelector('.tb-more-wrapper');
@@ -146,7 +205,7 @@ export const ToolbarPlugin = {
         toolbar.onmousedown = (e) => {
             if (e.target.closest('.tb-more-trigger')) return;
             const btn = e.target.closest('.tb-btn');
-            if (!btn || IGNORED.includes(btn.id)) return;
+            if (!btn || btn.disabled || IGNORED.includes(btn.id)) return;
             e.preventDefault();
             sq.focus();
             this._handleAction(btn.dataset.cmd, btn.dataset.val);
@@ -157,8 +216,9 @@ export const ToolbarPlugin = {
         const btnHr = Utils.$('btn-hr');
         if (btnHr) {
             btnHr.onclick = () => {
-                sq.focus();
-                sq.insertHTML('<hr contenteditable="false"><p><br></p>');
+                insertTextDivider(sq);
+                this._onChange?.();
+                this.scheduleSync();
             };
         }
 
@@ -226,6 +286,30 @@ export const ToolbarPlugin = {
                 }
                 break;
 
+            case 'insertTable':
+                TablePlugin.insertTable(sq);
+                break;
+
+            case 'insertTableRow':
+                TablePlugin.insertRow(sq);
+                break;
+
+            case 'insertTableColumn':
+                TablePlugin.insertColumn(sq);
+                break;
+
+            case 'deleteTableRow':
+                TablePlugin.deleteRow(sq);
+                break;
+
+            case 'deleteTableColumn':
+                TablePlugin.deleteColumn(sq);
+                break;
+
+            case 'deleteTable':
+                TablePlugin.deleteTable(sq);
+                break;
+
             default: break;
         }
         if (this._onChange) this._onChange();
@@ -266,6 +350,12 @@ export const ToolbarPlugin = {
         b.justify?.classList.toggle('active', block?.style.textAlign === 'justify');
 
         b.indent?.classList.toggle('active', IndentPlugin.isActive(sq));
+
+        const inTable = TablePlugin.isActive(sq);
+        b.table?.classList.toggle('active', inTable);
+        b.tableContext?.forEach((btn) => {
+            btn.disabled = !inTable;
+        });
     },
 
     cancelRaf() {

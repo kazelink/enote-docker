@@ -1,12 +1,11 @@
-
-# Build native dependencies once, then copy only runtime artifacts.
 FROM node:20-alpine AS deps
 
 WORKDIR /app
 
 COPY package*.json ./
-RUN apk add --no-cache python3 make g++ && \
-    npm install --omit=dev
+RUN apk add --no-cache --virtual .build-deps python3 make g++ && \
+    npm install --omit=dev && \
+    apk del .build-deps
 
 FROM node:20-alpine
 
@@ -19,10 +18,10 @@ RUN apk add --no-cache su-exec && \
 
 ENV NODE_ENV=production
 
-COPY --from=deps /app/node_modules ./node_modules
-COPY package.json ./package.json
-COPY src ./src
-COPY public ./public
+COPY --from=deps --chown=enote:enote /app/node_modules ./node_modules
+COPY --chown=enote:enote package.json ./package.json
+COPY --chown=enote:enote src ./src
+COPY --chown=enote:enote public ./public
 COPY --chmod=755 entrypoint.sh ./entrypoint.sh
 
 VOLUME ["/app/data"]

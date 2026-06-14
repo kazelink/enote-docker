@@ -1,6 +1,11 @@
 import sanitizeHtml from 'sanitize-html';
 
 const SAFE_DATA_IMAGE_RE = /^data:image\/(?:png|jpe?g|gif|webp);base64,[a-z0-9+/=\s]+$/i;
+const EXTRA_ALLOWED_TAGS = [
+  'img', 'video',
+  'table', 'thead', 'tbody', 'tfoot', 'tr', 'th', 'td', 'caption'
+];
+const TABLE_SCOPE_VALUES = new Set(['row', 'col', 'rowgroup', 'colgroup']);
 
 function isSafeMediaSrc(value) {
   if (typeof value !== 'string') return false;
@@ -16,13 +21,40 @@ function isSafeMediaSrc(value) {
   return SAFE_DATA_IMAGE_RE.test(compact);
 }
 
+function sanitizeSpanAttribute(value) {
+  const numeric = parseInt(String(value || '').trim(), 10);
+  return Number.isInteger(numeric) && numeric >= 1 && numeric <= 20 ? String(numeric) : '';
+}
+
+function sanitizeTableCell(tagName, attribs) {
+  const next = { ...attribs };
+  const colspan = sanitizeSpanAttribute(next.colspan);
+  const rowspan = sanitizeSpanAttribute(next.rowspan);
+
+  if (colspan) next.colspan = colspan;
+  else delete next.colspan;
+
+  if (rowspan) next.rowspan = rowspan;
+  else delete next.rowspan;
+
+  if (tagName === 'th') {
+    const scope = String(next.scope || '').toLowerCase();
+    if (TABLE_SCOPE_VALUES.has(scope)) next.scope = scope;
+    else delete next.scope;
+  } else {
+    delete next.scope;
+  }
+
+  return { tagName, attribs: next };
+}
+
 export async function sanitizeContent(html) {
   if (typeof html !== 'string') return '';
 
   // Use sanitize-html to safely parse and clean HTML
   return sanitizeHtml(html, {
     // Allow essential text formatting tags
-    allowedTags: sanitizeHtml.defaults.allowedTags.concat(['img', 'video']),
+    allowedTags: [...new Set(sanitizeHtml.defaults.allowedTags.concat(EXTRA_ALLOWED_TAGS))],
     
     // Whitelist safe attributes
     allowedAttributes: {
@@ -30,6 +62,8 @@ export async function sanitizeContent(html) {
       'a': ['href', 'target', 'rel'],
       'img': ['src', 'alt', 'loading', 'width', 'height'],
       'video': ['src', 'controls', 'preload', 'width', 'height'],
+      'td': ['colspan', 'rowspan'],
+      'th': ['colspan', 'rowspan', 'scope'],
       'iframe': ['src', 'width', 'height', 'frameborder', 'allow'],
       'source': ['src', 'type']
     },
@@ -61,7 +95,9 @@ export async function sanitizeContent(html) {
           return { tagName: 'video', attribs: { controls: 'controls' } };
         }
         return { tagName, attribs };
-      }
+      },
+      'td': sanitizeTableCell,
+      'th': sanitizeTableCell
     },
     
     // Strict disallowedTagsMode

@@ -10,7 +10,7 @@
     <link rel="icon" type="image/svg+xml" href="/assets/enote.svg">
     <link rel="preload" href="/assets/fonts/montserrat-latin.woff2" as="font" type="font/woff2" crossorigin="anonymous">
     <link href="/assets/fancybox.css" rel="stylesheet">
-    <link href="/app.css?v=5.10" rel="stylesheet">
+    <link href="/app.css?v=5.12" rel="stylesheet">
     <script src="/assets/htmx.js" defer></script>
     <script src="/assets/sweetalert2.all.min.js" defer></script>
 </head>
@@ -144,6 +144,43 @@
                                         </div>
                                     </div>
                                     <button class="tb-btn" id="btn-hr"><i class="ri-separator"></i></button>
+                                    <span class="tb-tool-divider" aria-hidden="true"></span>
+                                    <button class="tb-btn" id="btn-table" data-cmd="insertTable" type="button"
+                                        aria-label="Insert table" title="Insert table">
+                                        <svg class="tb-icon-svg tb-icon-stroke" viewBox="0 0 24 24">
+                                            <path d="M4 5h16v14H4zM4 10h16M4 15h16M9 5v14M15 5v14" />
+                                        </svg>
+                                    </button>
+                                    <button class="tb-btn" data-cmd="insertTableRow" data-table-context type="button"
+                                        aria-label="Insert row below" title="Insert row below" disabled>
+                                        <svg class="tb-icon-svg tb-icon-stroke" viewBox="0 0 24 24">
+                                            <path d="M4 5h16v10H4zM4 10h16M12 18v4M10 20h4" />
+                                        </svg>
+                                    </button>
+                                    <button class="tb-btn" data-cmd="insertTableColumn" data-table-context type="button"
+                                        aria-label="Insert column right" title="Insert column right" disabled>
+                                        <svg class="tb-icon-svg tb-icon-stroke" viewBox="0 0 24 24">
+                                            <path d="M4 5h10v14H4zM9 5v14M18 10v8M14 14h8" />
+                                        </svg>
+                                    </button>
+                                    <button class="tb-btn" data-cmd="deleteTableRow" data-table-context type="button"
+                                        aria-label="Delete row" title="Delete row" disabled>
+                                        <svg class="tb-icon-svg tb-icon-stroke" viewBox="0 0 24 24">
+                                            <path d="M4 5h16v14H4zM4 12h16M8 22l8-8M16 22l-8-8" />
+                                        </svg>
+                                    </button>
+                                    <button class="tb-btn" data-cmd="deleteTableColumn" data-table-context type="button"
+                                        aria-label="Delete column" title="Delete column" disabled>
+                                        <svg class="tb-icon-svg tb-icon-stroke" viewBox="0 0 24 24">
+                                            <path d="M4 5h16v14H4zM12 5v14M16 4l-8 8M8 4l8 8" />
+                                        </svg>
+                                    </button>
+                                    <button class="tb-btn" data-cmd="deleteTable" data-table-context type="button"
+                                        aria-label="Delete table" title="Delete table" disabled>
+                                        <svg class="tb-icon-svg tb-icon-stroke" viewBox="0 0 24 24">
+                                            <path d="M4 5h16v14H4zM7 8l10 8M17 8L7 16" />
+                                        </svg>
+                                    </button>
                                     <button class="tb-btn" id="btn-img"><i class="ri-image-add-line"></i></button>
                                     <button class="tb-btn" id="btn-vid">
                                         <svg class="tb-icon-svg-lg" viewBox="0 0 24 24">
@@ -281,7 +318,7 @@
 
     <div id="swal-root"></div>
 
-    <script type="module" src="/modules/app.js?v=5.8"></script>
+    <script type="module" src="/modules/app.js?v=5.10"></script>
 </body>
 
 </html>
