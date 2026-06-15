@@ -120,7 +120,7 @@ async function withLoading(fn, errorTitle = null, errorFallback = "Operation fai
 const COLLAPSE_STORAGE_KEY = "enote_collapsed_categories";
 
 const App = {
-  _views: {}, _popstateHandler: null, _restoreInFlight: false, _searchPanelOpen: false, _folderTreeCache: null, _tagCloudCache: null, _tagCloudExpanded: false, _collapsedCategories: new Set(), _collapsedStateLoaded: false, _folderPanelCollapsed: false, _currentNote: null, _notePathHint: null, _treeContextState: { scope: "root", category: "" },
+  _views: {}, _popstateHandler: null, _restoreInFlight: false, _searchPanelOpen: false, _folderTreeCache: null, _tagCloudCache: null, _tagCloudExpanded: false, _tagCloudPanelCollapsed: false, _collapsedCategories: new Set(), _collapsedStateLoaded: false, _folderPanelCollapsed: false, _currentNote: null, _notePathHint: null, _treeContextState: { scope: "root", category: "" },
 
   _resetListContent() {
     ["home-entry-list", "category-entry-list", "entry-list"].forEach(id => {
@@ -311,10 +311,26 @@ const App = {
     const footerMarkup = hasOverflow ? `<div class="tag-cloud-footer"><button class="tag-cloud-more${this._tagCloudExpanded ? " is-expanded" : ""}" type="button" aria-label="${this._tagCloudExpanded ? "Show fewer tags" : "Show more tags"}" onclick="App.toggleTagCloudExpanded()"><i class="ri-arrow-right-s-line"></i></button></div>` : "";
     target.innerHTML = `<div class="tag-cloud-list">${chipsHtml}</div>${footerMarkup}`;
     target.querySelector(".tag-cloud-more")?.removeAttribute("title");
+    this._syncTagCloudPanelControls();
   },
 
   _invalidateSidebarCaches() { this._folderTreeCache = this._tagCloudCache = null; this._tagCloudExpanded = false; },
   toggleTagCloudExpanded() { if ((this._tagCloudCache || []).length > TAG_PREVIEW_LIMIT) { this._tagCloudExpanded = !this._tagCloudExpanded; this._renderTagCloud(); } },
+  toggleTagCloudPanel() {
+    this._tagCloudPanelCollapsed = !this._tagCloudPanelCollapsed;
+    this._syncTagCloudPanelControls();
+  },
+  _syncTagCloudPanelControls() {
+    const cloud = Utils.$("tag-cloud");
+    if (cloud) cloud.classList.toggle("collapsed", this._tagCloudPanelCollapsed);
+    const toggle = Utils.$("btn-tag-cloud-toggle");
+    if (toggle) {
+      toggle.setAttribute("aria-label", this._tagCloudPanelCollapsed ? "Show tags" : "Hide tags");
+      toggle.dataset.state = this._tagCloudPanelCollapsed ? "collapsed" : "expanded";
+    }
+    const label = Utils.$("tag-cloud-toggle-label");
+    if (label) label.textContent = "";
+  },
 
   _syncFolderPanelControls() {
     Utils.$("folder-tree-shell")?.classList.toggle("collapsed", this._folderPanelCollapsed);

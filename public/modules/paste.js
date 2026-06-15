@@ -1,5 +1,5 @@
 const ALLOWED_TAGS = new Set([
-    'p', 'div', 'h1', 'h2', 'blockquote', 'hr', 'br',
+    'p', 'div', 'h1', 'h2', 'blockquote', 'br',
     'span', 'b', 'strong', 'i', 'em', 'u', 's', 'code', 'pre',
     'ul', 'ol', 'li', 'a', 'img', 'video',
     'table', 'thead', 'tbody', 'tfoot', 'tr', 'th', 'td', 'caption'
@@ -76,14 +76,6 @@ function sanitizeClass(tag, value) {
         ].filter(Boolean).join(' ');
     }
     return '';
-}
-
-function replaceHrWithTextDivider(el) {
-    const divider = el.ownerDocument.createElement('p');
-    divider.className = DIVIDER_CLASS;
-    divider.style.textAlign = 'center';
-    divider.textContent = DIVIDER_TEXT;
-    el.replaceWith(divider);
 }
 
 function sanitizeStyle(tag, styleMap) {
@@ -259,11 +251,6 @@ function sanitizeNode(node) {
 
     if (STRIP_WITH_CONTENT.has(tag)) {
         el.remove();
-        return;
-    }
-
-    if (tag === 'hr') {
-        replaceHrWithTextDivider(el);
         return;
     }
 

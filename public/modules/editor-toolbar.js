@@ -46,7 +46,7 @@ function isEmptyBlock(node) {
     return !!node
         && /^(P|DIV)$/i.test(node.nodeName)
         && !node.textContent.trim()
-        && !node.querySelector('img, video, table, hr');
+        && !node.querySelector('img, video, table');
 }
 
 function setCursorAtEnd(sq, node) {

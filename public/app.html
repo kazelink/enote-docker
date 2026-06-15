@@ -82,6 +82,10 @@
                 <aside class="workspace-panel tags-panel">
                     <div class="panel-head">
                         <span class="panel-title">TAGS</span>
+                        <button class="panel-tool-btn" id="btn-tag-cloud-toggle" type="button"
+                            onclick="App.toggleTagCloudPanel()" aria-label="Hide tags">
+                            <span id="tag-cloud-toggle-label"></span>
+                        </button>
                     </div>
                     <div id="tag-cloud" class="tag-cloud"></div>
                 </aside>
@@ -145,7 +149,6 @@
                                         </div>
                                     </div>
                                     <button class="tb-btn" id="btn-hr"><i class="ri-separator"></i></button>
-                                    <span class="tb-tool-divider" aria-hidden="true"></span>
                                     <button class="tb-btn" id="btn-table" data-cmd="insertTable" type="button"
                                         aria-label="Insert table" title="Insert table">
                                         <svg class="tb-icon-svg tb-icon-stroke" viewBox="0 0 24 24">

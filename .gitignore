@@ -7,3 +7,6 @@ data/
 
 # Logs
 *.log
+
+# AI tool config
+.claude/

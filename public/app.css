@@ -262,6 +262,64 @@ body.ready {
     flex-shrink: 0;
 }
 
+.tags-panel .panel-head {
+    gap: 12px;
+}
+
+.tags-panel .panel-tool-btn {
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: none;
+    border-radius: 7px;
+    background: transparent;
+    box-shadow: none;
+    color: #95a4b6;
+}
+
+.tags-panel .panel-tool-btn>span {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    font-size: 0;
+    line-height: 1;
+}
+
+.tags-panel .panel-tool-btn>span::before {
+    font-family: 'remixicon' !important;
+    font-size: 18px;
+    font-weight: 400;
+    line-height: 1;
+    transition: transform 0.22s ease, opacity 0.2s ease;
+}
+
+#tag-cloud-toggle-label::before {
+    content: "\ea6e";
+    transform: rotate(-90deg);
+}
+
+#btn-tag-cloud-toggle[data-state="expanded"] #tag-cloud-toggle-label::before {
+    transform: rotate(90deg);
+}
+
+.tags-panel .panel-tool-btn:hover {
+    background: rgba(var(--m-blu-rgb), 0.08);
+    color: var(--m-blu);
+}
+
+.tag-cloud.collapsed {
+    display: none;
+}
+
+.tags-panel:has(.tag-cloud.collapsed) .panel-head {
+    border-bottom-color: transparent;
+    margin-bottom: 0;
+    padding-bottom: 0;
+}
+
 .main-panel {
     min-width: 0;
     padding: 14px 16px 18px;
@@ -1310,9 +1368,7 @@ input[type=number] {
     color: var(--txt-sub);
 }
 
-.tb-tool-divider {
-    display: none;
-}
+
 
 .tb-icon-svg {
     width: 1.15em;
@@ -1557,16 +1613,6 @@ input[type=number] {
     overflow-wrap: break-word;
 }
 
-.editor-box hr,
-.dc-text hr {
-    border: none;
-    border-top: 2px solid #eee;
-    width: 60px;
-    margin: 1em auto;
-    user-select: none;
-    pointer-events: none;
-}
-
 .editor-box .text-divider,
 .dc-text .text-divider {
     margin: 0;
@@ -1609,6 +1655,11 @@ input[type=number] {
 }
 
 .dc-text {
+    min-width: 0;
+}
+
+.dc-text table {
+    display: block;
     overflow-x: auto;
 }
 
@@ -2221,6 +2272,8 @@ input[type=number] {
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02);
     border: 1px solid var(--border);
     transition: all 0.3s ease;
+    min-width: 0;
+    overflow: hidden;
 }
 
 .d-item.editing-inline {
@@ -2543,6 +2596,7 @@ input[type=number] {
 .note-detail-body {
     margin-top: 0;
     width: 100%;
+    min-width: 0;
 }
 
 .note-date-muted {
@@ -3039,6 +3093,18 @@ input[type=number] {
     .editor-box img,
     .dc-text img {
         width: 100%;
+    }
+
+    .editor-box table,
+    .dc-text table {
+        min-width: 0;
+    }
+
+    .editor-box th,
+    .editor-box td,
+    .dc-text th,
+    .dc-text td {
+        min-width: 48px;
     }
 
     .editor-fullscreen {
