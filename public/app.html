@@ -83,11 +83,11 @@
                     <div class="panel-head">
                         <span class="panel-title">TAGS</span>
                         <button class="panel-tool-btn" id="btn-tag-cloud-toggle" type="button"
-                            onclick="App.toggleTagCloudPanel()" aria-label="Hide tags">
+                            data-state="collapsed" onclick="App.toggleTagCloudPanel()" aria-label="Show tags">
                             <span id="tag-cloud-toggle-label"></span>
                         </button>
                     </div>
-                    <div id="tag-cloud" class="tag-cloud"></div>
+                    <div id="tag-cloud" class="tag-cloud collapsed"></div>
                 </aside>
             </div>
 

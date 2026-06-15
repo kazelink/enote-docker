@@ -1615,9 +1615,22 @@ input[type=number] {
 
 .editor-box .text-divider,
 .dc-text .text-divider {
-    margin: 0;
+    margin: 1.5em 0;
     text-align: center;
-    color: #c0c4cc;
+    color: transparent;
+    position: relative;
+    user-select: none;
+}
+
+.editor-box .text-divider::after,
+.dc-text .text-divider::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    border-top: 1px solid #dcdfe6;
+    pointer-events: none;
 }
 
 .editor-box a,
@@ -1660,6 +1673,7 @@ input[type=number] {
 }
 
 .dc-text table {
+    display: block;
     overflow-x: auto;
 }
 
@@ -1716,11 +1730,12 @@ input[type=number] {
 
 .editor-box table,
 .dc-text table {
-    width: auto;
-    max-width: 100%;
+    width: 100%;
+    min-width: 360px;
     margin: 1em 0;
     border-collapse: collapse;
     border: 1px solid #dbe3ec;
+    table-layout: fixed;
     text-align: left;
     background: #fff;
 }
