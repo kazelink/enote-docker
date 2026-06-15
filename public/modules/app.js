@@ -120,7 +120,7 @@ async function withLoading(fn, errorTitle = null, errorFallback = "Operation fai
 const COLLAPSE_STORAGE_KEY = "enote_collapsed_categories";
 
 const App = {
-  _views: {}, _popstateHandler: null, _restoreInFlight: false, _searchPanelOpen: false, _folderTreeCache: null, _tagCloudCache: null, _tagCloudExpanded: false, _tagCloudPanelCollapsed: false, _collapsedCategories: new Set(), _collapsedStateLoaded: false, _folderPanelCollapsed: false, _currentNote: null, _notePathHint: null, _treeContextState: { scope: "root", category: "" },
+  _views: {}, _popstateHandler: null, _restoreInFlight: false, _searchPanelOpen: false, _folderTreeCache: null, _tagCloudCache: null, _tagCloudExpanded: false, _tagCloudPanelCollapsed: true, _collapsedCategories: new Set(), _collapsedStateLoaded: false, _folderPanelCollapsed: false, _currentNote: null, _notePathHint: null, _treeContextState: { scope: "root", category: "" },
 
   _resetListContent() {
     ["home-entry-list", "category-entry-list", "entry-list"].forEach(id => {

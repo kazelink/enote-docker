@@ -1617,6 +1617,7 @@ input[type=number] {
 .dc-text .text-divider {
     margin: 0;
     text-align: center;
+    color: #c0c4cc;
 }
 
 .editor-box a,
@@ -1659,7 +1660,6 @@ input[type=number] {
 }
 
 .dc-text table {
-    display: block;
     overflow-x: auto;
 }
 
@@ -1716,12 +1716,11 @@ input[type=number] {
 
 .editor-box table,
 .dc-text table {
-    width: 100%;
-    min-width: 360px;
+    width: auto;
+    max-width: 100%;
     margin: 1em 0;
     border-collapse: collapse;
     border: 1px solid #dbe3ec;
-    table-layout: fixed;
     text-align: left;
     background: #fff;
 }
