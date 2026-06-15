@@ -1615,22 +1615,10 @@ input[type=number] {
 
 .editor-box .text-divider,
 .dc-text .text-divider {
-    margin: 1.5em 0;
+    margin: 0;
     text-align: center;
-    color: transparent;
-    position: relative;
-    user-select: none;
-}
-
-.editor-box .text-divider::after,
-.dc-text .text-divider::after {
-    content: '';
-    position: absolute;
-    left: 0;
-    right: 0;
-    top: 50%;
-    border-top: 1px solid #dcdfe6;
-    pointer-events: none;
+    color: #c0c4cc;
+    letter-spacing: -3px;
 }
 
 .editor-box a,
