@@ -1661,8 +1661,9 @@ input[type=number] {
 }
 
 .dc-text table {
-    display: block;
-    overflow-x: auto;
+    width: auto;
+    max-width: 100%;
+    margin: 1em auto;
 }
 
 .editor-box img,
@@ -1718,14 +1719,17 @@ input[type=number] {
 
 .editor-box table,
 .dc-text table {
-    width: 100%;
     min-width: 360px;
-    margin: 1em 0;
     border-collapse: collapse;
     border: 1px solid #dbe3ec;
     table-layout: fixed;
     text-align: left;
     background: #fff;
+}
+
+.editor-box table {
+    width: 100%;
+    margin: 1em 0;
 }
 
 .editor-box th,
@@ -3100,6 +3104,11 @@ input[type=number] {
     .editor-box table,
     .dc-text table {
         min-width: 0;
+    }
+
+    .dc-text table {
+        display: block;
+        overflow-x: auto;
     }
 
     .editor-box th,
