@@ -2971,10 +2971,11 @@ input[type=number] {
     padding: 0;
     border: none;
     border-radius: 7px;
-    background: transparent;
+    background: rgba(var(--m-blu-rgb), 0.08);
     box-shadow: none;
     color: #95a4b6;
     margin-left: auto;
+    cursor: pointer;
 }
 
 #btn-print-mode>span {
@@ -2994,16 +2995,17 @@ input[type=number] {
     font-weight: 400;
     line-height: 1;
     content: "\ea6e";
-    transform: rotate(-90deg);
+    transform: rotate(90deg);
     transition: transform 0.22s ease;
 }
 
 #btn-print-mode[data-state="collapsed"] #print-mode-label::before {
-    transform: rotate(90deg);
+    transform: rotate(-90deg);
 }
 
 #btn-print-mode:hover {
-    background: var(--hover-bg);
+    background: rgba(var(--m-blu-rgb), 0.15);
+    color: var(--m-blu);
 }
 
 /* ==========================================================================
