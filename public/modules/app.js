@@ -320,6 +320,10 @@ const App = {
     this._tagCloudPanelCollapsed = !this._tagCloudPanelCollapsed;
     this._syncTagCloudPanelControls();
   },
+  togglePrintMode() {
+    document.body.classList.toggle('print-mode');
+    Utils.$('btn-print-mode')?.classList.toggle('active');
+  },
   _syncTagCloudPanelControls() {
     const cloud = Utils.$("tag-cloud");
     if (cloud) cloud.classList.toggle("collapsed", this._tagCloudPanelCollapsed);

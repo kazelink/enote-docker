@@ -2947,6 +2947,40 @@ input[type=number] {
 }
 
 /* ==========================================================================
+   10.5 Print Mode
+   ========================================================================== */
+.print-mode .workspace-side {
+    display: none;
+}
+
+.print-mode .workspace-shell {
+    grid-template-columns: minmax(0, 1fr) !important;
+}
+
+.print-mode .dc-text,
+.print-mode .dc-text *,
+.print-mode .note-detail-title,
+.print-mode .note-detail-meta,
+.print-mode .note-detail-tags {
+    color: #000 !important;
+}
+
+#btn-print-mode {
+    font-size: 15px;
+    opacity: 0.5;
+    transition: opacity 0.2s;
+}
+
+#btn-print-mode:hover {
+    opacity: 0.8;
+}
+
+#btn-print-mode.active {
+    opacity: 1;
+    color: var(--m-blu);
+}
+
+/* ==========================================================================
    11. Media Queries & Mobile Overrides
    ========================================================================== */
 @media (max-width: 1260px) {
