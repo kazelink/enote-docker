@@ -2966,18 +2966,44 @@ input[type=number] {
 }
 
 #btn-print-mode {
-    font-size: 15px;
-    opacity: 0.5;
-    transition: opacity 0.2s;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: none;
+    border-radius: 7px;
+    background: transparent;
+    box-shadow: none;
+    color: #95a4b6;
+    margin-left: auto;
+}
+
+#btn-print-mode>span {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    font-size: 0;
+    line-height: 1;
+}
+
+#print-mode-label::before {
+    font-family: 'remixicon' !important;
+    font-size: 18px;
+    font-weight: 400;
+    line-height: 1;
+    content: "\ea6e";
+    transform: rotate(-90deg);
+    transition: transform 0.22s ease;
+}
+
+#btn-print-mode[data-state="collapsed"] #print-mode-label::before {
+    transform: rotate(90deg);
 }
 
 #btn-print-mode:hover {
-    opacity: 0.8;
-}
-
-#btn-print-mode.active {
-    opacity: 1;
-    color: var(--m-blu);
+    background: var(--hover-bg);
 }
 
 /* ==========================================================================

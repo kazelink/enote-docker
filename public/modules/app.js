@@ -321,8 +321,9 @@ const App = {
     this._syncTagCloudPanelControls();
   },
   togglePrintMode() {
-    document.body.classList.toggle('print-mode');
-    Utils.$('btn-print-mode')?.classList.toggle('active');
+    const active = document.body.classList.toggle('print-mode');
+    const btn = Utils.$('btn-print-mode');
+    if (btn) btn.dataset.state = active ? 'collapsed' : 'expanded';
   },
   _syncTagCloudPanelControls() {
     const cloud = Utils.$("tag-cloud");
