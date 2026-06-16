@@ -2971,10 +2971,9 @@ input[type=number] {
     padding: 0;
     border: none;
     border-radius: 7px;
-    background: rgba(var(--m-blu-rgb), 0.08);
+    background: transparent;
     box-shadow: none;
     color: #95a4b6;
-    margin-left: auto;
     cursor: pointer;
 }
 
@@ -2994,17 +2993,16 @@ input[type=number] {
     font-size: 18px;
     font-weight: 400;
     line-height: 1;
-    content: "\ea6e";
-    transform: rotate(90deg);
+    content: "\ea64";
     transition: transform 0.22s ease;
 }
 
 #btn-print-mode[data-state="collapsed"] #print-mode-label::before {
-    transform: rotate(-90deg);
+    content: "\ea6a";
 }
 
 #btn-print-mode:hover {
-    background: rgba(var(--m-blu-rgb), 0.15);
+    background: rgba(var(--m-blu-rgb), 0.08);
     color: var(--m-blu);
 }
 
