@@ -175,6 +175,8 @@ export const Editor = {
             el.dSave.disabled = true;
         }
 
+        const returnPage = State.editingId && Number.isFinite(State.page) && State.page > 0 ? State.page : 1;
+
         try {
             const result = await API.req('save', {
                 id: State.editingId,
@@ -214,7 +216,7 @@ export const Editor = {
                 category: savedNote.category,
                 subcategory: savedNote.subcategory,
                 note: savedNote.id,
-                q: '', tag: '', page: 1
+                q: '', tag: '', page: returnPage
             }, { quiet: true });
 
             UI.setStatus('ok');
