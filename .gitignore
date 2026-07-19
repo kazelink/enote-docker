@@ -1,0 +1,12 @@
+# Dependencies
+node_modules/
+
+# Local data & secrets
+data/
+.env
+
+# Logs
+*.log
+
+# AI tool config
+.claude/
