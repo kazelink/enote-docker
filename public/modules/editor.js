@@ -52,6 +52,7 @@ export const Editor = {
     _metaSuggestOptions: [],
     _metaSuggestActiveIndex: -1,
     _metaSuggestHideTimer: null,
+    _metaSuggestRaf: 0,
     _openMode: '',
     _hiddenInlineNodes: [],
     _metaCollapsed: false,
@@ -413,8 +414,15 @@ export const Editor = {
             if (!menu.contains(e.target) && e.target !== input) this._hideMetaSuggestions();
         });
 
-        window.addEventListener('resize', () => this._repositionMetaSuggestions());
-        window.addEventListener('scroll', () => this._repositionMetaSuggestions(), true);
+        const scheduleReposition = () => {
+            if (this._metaSuggestRaf) return;
+            this._metaSuggestRaf = requestAnimationFrame(() => {
+                this._metaSuggestRaf = 0;
+                this._repositionMetaSuggestions();
+            });
+        };
+        window.addEventListener('resize', scheduleReposition);
+        window.addEventListener('scroll', scheduleReposition, true);
         return menu;
     },
 
@@ -464,6 +472,10 @@ export const Editor = {
 
     _hideMetaSuggestions(field = '') {
         if (field && this._metaSuggestField && field !== this._metaSuggestField) return;
+        if (this._metaSuggestRaf) {
+            cancelAnimationFrame(this._metaSuggestRaf);
+            this._metaSuggestRaf = 0;
+        }
         this._cancelHideMetaSuggestions();
         this._metaSuggestField = '';
         this._metaSuggestOptions = [];

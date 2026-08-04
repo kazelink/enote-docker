@@ -2,7 +2,7 @@ import { Utils, State, escapeHtml } from "./dom.js";
 import { API, authHeaders, Nonce, Token } from "./api.js";
 import { UI } from "./ui.js";
 import { swalConfirm, swalAlert, swalPrompt } from "./swal.js";
-import { Editor } from "./editor.js?v=5.7";
+import { Editor } from "./editor.js?v=5.8";
 import { Auth } from "./auth.js";
 
 const MAX_RESTORE_FILE_BYTES = 100 * 1024 * 1024;
@@ -24,6 +24,10 @@ function renderNotesHomeState() {
       </div>
       <p>Open a folder to browse notes.</p>
     </div>`;
+}
+
+function renderLoading() {
+  return '<div class="loading-hint">Loading...</div>';
 }
 
 function getRestoreInput() { return Utils.$("restore-input"); }
@@ -122,11 +126,14 @@ const App = {
   _resetListContent() {
     ["home-entry-list", "category-entry-list", "entry-list"].forEach(id => {
       const el = Utils.$(id);
-      if (el) {
-        el.innerHTML = id === "home-entry-list" ? renderNotesHomeState() : '<div class="loading-hint">Loading...</div>';
-        const pg = el.closest(".view-container")?.querySelector("[data-pagination]");
-        if (pg) pg.style.display = "none";
+      if (!el) return;
+      // Keep existing rows visible while the next batch loads (stale-while-revalidate);
+      // only seed a loading placeholder when the container is empty.
+      if (el.children.length === 0) {
+        el.innerHTML = id === "home-entry-list" ? renderNotesHomeState() : renderLoading();
       }
+      const pg = el.closest(".view-container")?.querySelector("[data-pagination]");
+      if (pg) pg.style.display = "none";
     });
   },
   _loadCollapsedState() {
@@ -211,7 +218,7 @@ const App = {
         if (this._currentNote?.id === id) {
           el.innerHTML = this._renderNoteDetail(this._currentNote);
         } else {
-          el.innerHTML = '<div class="loading-hint">Loading...</div>';
+          el.innerHTML = renderLoading();
         }
       }
     }
@@ -258,10 +265,8 @@ const App = {
     if (!el) return;
     const viewEl = el.closest(".view-container");
     const pg = viewEl?.querySelector("[data-pagination]");
-    if (!options.quiet || !el.children.length) {
-      el.innerHTML = '<div class="loading-hint">Loading...</div>';
-      if (pg) pg.style.display = "none";
-    }
+    if (pg) pg.style.display = "none";
+    if (!el.children.length) el.innerHTML = renderLoading();
     const html = await API.html("list", params);
     if (seq !== undefined && seq !== this._loadSeq) return;
     el.innerHTML = html;
@@ -272,7 +277,7 @@ const App = {
     const target = Utils.$("folder-tree");
     if (!target) return;
     if (!force && this._folderTreeCache) return (this._renderFolderTree(), this._updateDatalists());
-    if (!target.querySelector('.tree-group')) target.innerHTML = '<div class="loading-hint">Loading...</div>';
+    if (!target.querySelector('.tree-group')) target.innerHTML = renderLoading();
 
     const tree = await API.req("folders/tree");
     this._folderTreeCache = Array.isArray(tree) ? tree : [];
@@ -284,7 +289,7 @@ const App = {
     const target = Utils.$("tag-cloud");
     if (!target) return;
     if (!force && this._tagCloudCache) return this._renderTagCloud();
-    if (!target.querySelector('.tag-cloud-list')) target.innerHTML = '<div class="tag-cloud-empty">Loading...</div>';
+    if (!target.querySelector('.tag-cloud-list')) target.innerHTML = renderLoading();
 
     const tags = await API.req("tags");
     this._tagCloudCache = Array.isArray(tags) ? tags : [];
@@ -447,7 +452,7 @@ const App = {
       UI.renderBreadcrumb(this._breadcrumbContext()); el.innerHTML = this._renderNoteDetail(this._currentNote); this._renderFolderTree();
       // Just saved: the save response was the canonical content, skip the refetch.
       if (this._currentNoteFresh) { this._currentNoteFresh = false; return; }
-    } else el.innerHTML = '<div class="loading-hint">Loading...</div>';
+    } else el.innerHTML = renderLoading();
 
     const note = await API.req("list", { id });
     if (String(State.note || "").trim() !== id) return;
@@ -645,7 +650,7 @@ const App = {
   },
   async deleteEntry(id) {
     if (!await swalConfirm("Delete Note?", "This note and its unused local media will be removed.")) return;
-    const d = Utils.$("note-detail"); if (d) d.innerHTML = '<div class="loading-hint">Loading...</div>';
+    const d = Utils.$("note-detail"); if (d) d.innerHTML = renderLoading();
     document.querySelectorAll(`.archive-row[data-id="${CSS.escape(id)}"]`).forEach(el => el.remove());
     await withLoading(async () => {
       await API.req("delete", { id }, "DELETE");
