@@ -51,16 +51,22 @@ export function renderPagination(currPg, totalPg) {
   const pgStyle = safeTotal > 1 ? 'flex' : 'none';
   return `
     <div class="pg-box" data-pagination style="display:${pgStyle}">
-      <span class="pg-btn" onclick="App.changePage(-1)"><i class="ri-arrow-left-s-line"></i></span>
+      <span class="pg-btn" role="button" tabindex="0" aria-label="Previous page" title="Previous page"
+        onclick="App.changePage(-1)"
+        onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();App.changePage(-1)}"><i class="ri-arrow-left-s-line"></i><span class="pg-spin" aria-hidden="true"></span></span>
       <div class="pg-status">
-        <span class="pg-status-txt" onclick="App.toggleJump(true)">${currPg}</span>
+        <span class="pg-status-txt" role="button" tabindex="0" aria-label="Jump to page" title="Click to jump to a page"
+          onclick="App.toggleJump(true)"
+          onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();App.toggleJump(true)}">${currPg}</span>
         <input type="number" class="pg-inp" style="display:none"
           value="${currPg}"
           onblur="App.toggleJump(false)"
           onkeydown="if(event.key==='Enter')this.blur()">
         <span>/ <span class="pg-total">${safeTotal}</span></span>
       </div>
-      <span class="pg-btn" onclick="App.changePage(1)"><i class="ri-arrow-right-s-line"></i></span>
+      <span class="pg-btn" role="button" tabindex="0" aria-label="Next page" title="Next page"
+        onclick="App.changePage(1)"
+        onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();App.changePage(1)}"><i class="ri-arrow-right-s-line"></i><span class="pg-spin" aria-hidden="true"></span></span>
       <div class="pg-data" data-total="${safeTotal}" style="display:none"></div>
     </div>
   `;

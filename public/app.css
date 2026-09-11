@@ -2631,13 +2631,69 @@ input[type=number] {
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: background-color var(--dur-fast) ease, color var(--dur-fast) ease;
+    transition: background-color var(--dur-fast) ease, color var(--dur-fast) ease, transform var(--dur-fast) ease;
     color: var(--text-soft);
 }
 
 .pg-btn:hover {
     background: rgba(var(--m-blu-rgb), 0.08);
     color: var(--m-blu);
+}
+
+.pg-btn:active {
+    transform: scale(0.94);
+}
+
+/* Inline page-turn feedback: the arrow you clicked becomes a spinner while
+   the next page loads. The page number stays visible so the bar never jumps. */
+.pg-spin {
+    display: none;
+    width: 13px;
+    height: 13px;
+    border-radius: 50%;
+    border: 2px solid rgba(var(--m-blu-rgb), 0.22);
+    border-top-color: var(--m-blu);
+    animation: spin 0.7s linear infinite;
+}
+
+.pg-btn.is-loading .pg-spin {
+    display: block;
+}
+
+.pg-btn.is-loading i {
+    display: none;
+}
+
+.pg-box.is-busy .pg-btn,
+.pg-box.is-busy .pg-status {
+    pointer-events: none;
+}
+
+.pg-box.is-busy .pg-btn {
+    opacity: 0.35;
+}
+
+.pg-box.is-busy .pg-btn.is-loading {
+    opacity: 1;
+}
+
+.pg-box.is-busy .pg-status {
+    opacity: 0.7;
+}
+
+/* Dim the outgoing rows (but never the pagination bar) while refreshing. */
+.is-updating > .archive-list,
+.is-updating > .loading-hint {
+    opacity: 0.4;
+    pointer-events: none;
+}
+
+#home-entry-list > .archive-list,
+#category-entry-list > .archive-list,
+#entry-list > .archive-list,
+.is-updating > .archive-list,
+.is-updating > .loading-hint {
+    transition: opacity var(--dur-fast) ease;
 }
 
 .pg-status {
@@ -2648,6 +2704,11 @@ input[type=number] {
     cursor: pointer;
     padding: 4px 8px;
     border-radius: 4px;
+    transition: background-color var(--dur-fast) ease;
+}
+
+.pg-status:hover {
+    background: rgba(var(--m-blu-rgb), 0.08);
 }
 
 .pg-inp {

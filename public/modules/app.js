@@ -193,7 +193,9 @@ const App = {
     // On a slow link, responses from an abandoned navigation can arrive after a
     // newer one; each loadView invalidates all earlier in-flight renders.
     const seq = ++this._loadSeq;
-    if (!options.quiet) this._resetListContent();
+    // A page turn keeps the current list and pagination in place so the row of
+    // page controls never flickers; only fresh navigations reset content.
+    if (!options.quiet && !options.pageTurn) this._resetListContent();
     syncStateFromLocation();
     if (State.view !== "note") this._currentNote = this._notePathHint = null;
 
@@ -231,7 +233,7 @@ const App = {
       }
       return;
     }
-    if (!options.quiet) UI.setStatus("loading");
+    if (!options.quiet && !options.pageTurn) UI.setStatus("loading");
 
     try {
       await Promise.all([
@@ -265,12 +267,20 @@ const App = {
     if (!el) return;
     const viewEl = el.closest(".view-container");
     const pg = viewEl?.querySelector("[data-pagination]");
-    if (pg) pg.style.display = "none";
+    // Only blank the pagination on a fresh navigation; a page turn keeps the
+    // existing bar (with its inline spinner) visible until the new HTML lands.
+    if (pg && !options.pageTurn) pg.style.display = "none";
     if (!el.children.length) el.innerHTML = renderLoading();
-    const html = await API.html("list", params);
-    if (seq !== undefined && seq !== this._loadSeq) return;
-    el.innerHTML = html;
-    State.data.totalPg = parseInt(viewEl?.querySelector(".pg-data")?.dataset.total, 10) || 1;
+    try {
+      const html = await API.html("list", params);
+      if (seq !== undefined && seq !== this._loadSeq) return;
+      el.innerHTML = html;
+      this._clearPaginationBusy(el);
+      State.data.totalPg = parseInt(viewEl?.querySelector(".pg-data")?.dataset.total, 10) || 1;
+    } catch (e) {
+      this._clearPaginationBusy(el);
+      throw e;
+    }
   },
 
   async _loadFolderTree(force = false) {
@@ -631,14 +641,17 @@ const App = {
   },
   handleSearchKeydown(e) { if (e.key === "Enter") { e.preventDefault(); this.applySearch(); } },
   toggleJump(show) {
-    const scopeEl = Object.values(this._views).find(v => v?.classList.contains("active"));
+    const scopeEl = this._activeViewEl();
     const txt = scopeEl?.querySelector(".pg-status-txt"), inp = scopeEl?.querySelector(".pg-inp");
     if (!txt || !inp) return;
     if (show) { txt.style.display = "none"; inp.style.display = "inline-block"; inp.value = State.page; requestAnimationFrame(() => inp.focus({ preventScroll: true })); }
     else {
       txt.style.display = "inline"; inp.style.display = "none";
       const next = parseInt(inp.value, 10);
-      if (next && next !== State.page && next <= State.data.totalPg) this.route({ page: next });
+      if (next && next !== State.page && next <= State.data.totalPg) {
+        this._setPaginationBusy(next > State.page ? 1 : -1);
+        this.route({ page: next }, { pageTurn: true });
+      }
     }
   },
 
@@ -661,7 +674,42 @@ const App = {
     });
   },
 
-  changePage(dir) { const n = State.page + dir; if (n >= 1 && n <= State.data.totalPg) this.route({ page: n }); },
+  changePage(dir) {
+    const n = State.page + dir;
+    if (n < 1 || n > State.data.totalPg) return;
+    // Show feedback right where the user clicked, then navigate quietly so the
+    // global header spinner stays out of the way.
+    this._setPaginationBusy(dir);
+    this.route({ page: n }, { pageTurn: true });
+  },
+
+  _activeViewEl() { return Object.values(this._views).find(v => v?.classList.contains("active")) || null; },
+
+  _setPaginationBusy(dir) {
+    const pg = this._activeViewEl()?.querySelector("[data-pagination]");
+    if (!pg) return;
+    pg.classList.add("is-busy");
+    pg.setAttribute("aria-busy", "true");
+    const btns = pg.querySelectorAll(".pg-btn");
+    (dir > 0 ? btns[1] : btns[0])?.classList.add("is-loading");
+    const listEl = pg.parentElement;
+    if (listEl) {
+      listEl.classList.add("is-updating");
+      listEl.setAttribute("aria-busy", "true");
+    }
+  },
+
+  _clearPaginationBusy(listEl) {
+    if (!listEl) return;
+    listEl.classList.remove("is-updating");
+    listEl.removeAttribute("aria-busy");
+    const pg = listEl.querySelector("[data-pagination]");
+    if (!pg) return;
+    pg.classList.remove("is-busy");
+    pg.removeAttribute("aria-busy");
+    pg.querySelectorAll(".pg-btn.is-loading").forEach(btn => btn.classList.remove("is-loading"));
+  },
+
   async goBack() {
     if (State.view === "note") this.route({ note: "" });
     else if (State.view === "list" && State.category && State.subcategory) this.route({ subcategory: "", page: 1 });
