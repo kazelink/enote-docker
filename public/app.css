@@ -1104,6 +1104,27 @@ input[type=number] {
     color: var(--text-soft);
 }
 
+/* Inline tree-navigation feedback: the folder you clicked swaps its count pill
+   for a spinner until its note list lands, so nothing blanks out. */
+.tree-node.is-loading .tree-label {
+    color: var(--m-blu);
+}
+
+.tree-count-loading {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.tree-spin {
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    border: 2px solid rgba(var(--m-blu-rgb), 0.22);
+    border-top-color: var(--m-blu);
+    animation: spin 0.7s linear infinite;
+}
+
 .tree-toggle {
     width: 24px;
     height: 24px;
@@ -2682,9 +2703,9 @@ input[type=number] {
     opacity: 0.7;
 }
 
-/* Dim the outgoing rows (but never the pagination bar) while refreshing. */
-.is-updating > .archive-list,
-.is-updating > .loading-hint {
+/* Dim the outgoing rows (but never the pagination bar or a loading hint) while
+   the next batch is on the wire. */
+.is-updating > .archive-list {
     opacity: 0.4;
     pointer-events: none;
 }
@@ -2692,8 +2713,7 @@ input[type=number] {
 #home-entry-list > .archive-list,
 #category-entry-list > .archive-list,
 #entry-list > .archive-list,
-.is-updating > .archive-list,
-.is-updating > .loading-hint {
+.is-updating > .archive-list {
     transition: opacity var(--dur-fast) ease;
 }
 

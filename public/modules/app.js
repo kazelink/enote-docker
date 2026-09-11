@@ -121,7 +121,7 @@ async function withLoading(fn, errorTitle = null, errorFallback = "Operation fai
 const COLLAPSE_STORAGE_KEY = "enote_collapsed_categories";
 
 const App = {
-  _views: {}, _popstateHandler: null, _restoreInFlight: false, _searchPanelOpen: false, _folderTreeCache: null, _tagCloudCache: null, _tagCloudExpanded: false, _tagCloudPanelCollapsed: true, _collapsedCategories: new Set(), _collapsedStateLoaded: false, _folderPanelCollapsed: false, _currentNote: null, _currentNoteFresh: false, _notePathHint: null, _treeContextState: { scope: "root", category: "" }, _lastFolderTreeHtml: null, _lastTagCloudHtml: null, _loadSeq: 0,
+  _views: {}, _popstateHandler: null, _restoreInFlight: false, _searchPanelOpen: false, _folderTreeCache: null, _tagCloudCache: null, _tagCloudExpanded: false, _tagCloudPanelCollapsed: true, _collapsedCategories: new Set(), _collapsedStateLoaded: false, _folderPanelCollapsed: false, _currentNote: null, _currentNoteFresh: false, _notePathHint: null, _treeContextState: { scope: "root", category: "" }, _lastFolderTreeHtml: null, _lastTagCloudHtml: null, _loadSeq: 0, _pendingTree: null,
 
   _resetListContent() {
     ["home-entry-list", "category-entry-list", "entry-list"].forEach(id => {
@@ -132,6 +132,8 @@ const App = {
       if (el.children.length === 0) {
         el.innerHTML = id === "home-entry-list" ? renderNotesHomeState() : renderLoading();
       }
+      // Drop any stale "loading" dimming before a fresh navigation renders.
+      el.classList.remove("is-updating");
       const pg = el.closest(".view-container")?.querySelector("[data-pagination]");
       if (pg) pg.style.display = "none";
     });
@@ -200,6 +202,9 @@ const App = {
     // cancels the unsaved-changes dialog, and a page control marked busy at
     // click time would then be stuck spinning forever.
     if (options.pageTurn) this._setPaginationBusy(options.dir);
+    // Same idea for tree navigation: the click handler only passes the target,
+    // and the pending marker is applied once the navigation is committed.
+    if (options.treeNav) this._pendingTree = options.treeNav;
     syncStateFromLocation();
     if (State.view !== "note") this._currentNote = this._notePathHint = null;
 
@@ -230,6 +235,8 @@ const App = {
     }
 
     if (State.view === "backup") {
+      // This branch returns before the block that clears transient loading state.
+      this._clearTreePending(seq);
       try {
         await this._loadFolderTree();
       } catch (e) {
@@ -237,7 +244,7 @@ const App = {
       }
       return;
     }
-    if (!options.quiet && !options.pageTurn) UI.setStatus("loading");
+    if (!options.quiet && !options.pageTurn && !options.treeNav) UI.setStatus("loading");
 
     try {
       await Promise.all([
@@ -258,8 +265,10 @@ const App = {
         await this._loadNote();
       }
       UI.setStatus("");
+      this._clearTreePending(seq);
     } catch (e) {
       this._clearPaginationBusy();
+      this._clearTreePending(seq);
       if (e?.code === "UNAUTHORIZED") { UI.setStatus(""); return; }
       console.error("View load failed:", e);
       UI.setStatus("err");
@@ -271,6 +280,9 @@ const App = {
     if (!el) return;
     const viewEl = el.closest(".view-container");
     if (!el.children.length) el.innerHTML = renderLoading();
+    // Dim whatever is on screen (old rows or the placeholder) while the next
+    // batch is on the wire, so the swap reads as an in-place update.
+    el.classList.add("is-updating");
     try {
       const html = await API.html("list", params);
       if (seq !== undefined && seq !== this._loadSeq) return;
@@ -411,20 +423,23 @@ const App = {
       const cat = String(r?.category || ""), encCat = encodeInlineParam(cat), subs = Array.isArray(r?.subfolders) ? r.subfolders : [];
       const isOpen = !this._collapsedCategories.has(cat);
       const isActCat = cat === aCat && !aSub, isActSub = cat === aCat && !!aSub;
+      const pend = this._pendingTree;
+      const isPendCat = !!pend && pend.category === cat && !pend.subcategory;
 
       return `
         <div class="tree-group ${isOpen ? "open" : ""}">
-          <div class="tree-node tree-category ${isActSub ? "active-parent" : isActCat ? "active" : ""}" onclick="App.openCategoryByEncoded('${encCat}')" oncontextmenu="return App.openTreeContextMenu(event, 'category', '${encCat}')">
+          <div class="tree-node tree-category ${isActSub ? "active-parent" : isActCat ? "active" : ""}${isPendCat ? " is-loading" : ""}" onclick="App.openCategoryByEncoded('${encCat}')" oncontextmenu="return App.openTreeContextMenu(event, 'category', '${encCat}')">
             <button class="tree-toggle" type="button" onclick="event.stopPropagation(); App.toggleCategoryFoldByEncoded('${encCat}')"><svg class="ri-icon" viewBox="0 0 24 24"><path d="M10 6l6 6-6 6"></path></svg></button>
-            <span class="tree-label">${escapeHtml(cat || "Imported")}</span><span class="tree-count">${Number(r?.count || 0)}</span>
+            <span class="tree-label">${escapeHtml(cat || "Imported")}</span>${this._treeCountCell(r?.count, isPendCat)}
             <span class="tree-delete-slot"><button class="tree-delete-btn" type="button" onclick="event.stopPropagation(); App.deleteCategoryByEncoded('${encCat}')"><i class="ri-close-line"></i></button></span>
           </div>
           <div class="tree-children">
             ${subs.length ? subs.map(s => {
         const sub = String(s?.subcategory || "General"), encSub = encodeInlineParam(sub);
+        const isPendSub = !!pend && pend.category === cat && pend.subcategory === sub;
         return `
-                <div class="tree-node tree-subcategory ${cat === aCat && sub === aSub ? "active" : ""}" onclick="App.openSubcategoryByEncoded('${encCat}', '${encSub}')" oncontextmenu="return App.openTreeContextMenu(event, 'subcategory', '${encCat}', '${encSub}')">
-                  <span class="tree-leaf"></span><span class="tree-label">${escapeHtml(sub)}</span><span class="tree-count">${Number(s?.count || 0)}</span>
+                <div class="tree-node tree-subcategory ${cat === aCat && sub === aSub ? "active" : ""}${isPendSub ? " is-loading" : ""}" onclick="App.openSubcategoryByEncoded('${encCat}', '${encSub}')" oncontextmenu="return App.openTreeContextMenu(event, 'subcategory', '${encCat}', '${encSub}')">
+                  <span class="tree-leaf"></span><span class="tree-label">${escapeHtml(sub)}</span>${this._treeCountCell(s?.count, isPendSub)}
                   <span class="tree-delete-slot"><button class="tree-delete-btn" type="button" onclick="event.stopPropagation(); App.deleteSubcategoryByEncoded('${encCat}', '${encSub}')"><i class="ri-close-line"></i></button></span>
                 </div>`;
       }).join("") : '<div class="tree-empty">No subfolders yet.</div>'}
@@ -436,6 +451,21 @@ const App = {
       target.innerHTML = html;
     }
     this._syncFolderPanelControls();
+  },
+
+  // The pending folder swaps its count pill for an inline spinner, mirroring the
+  // page-turn feedback: the thing you clicked shows the loading state itself.
+  _treeCountCell(count, isPending) {
+    return isPending
+      ? '<span class="tree-count tree-count-loading"><span class="tree-spin"></span></span>'
+      : `<span class="tree-count">${Number(count || 0)}</span>`;
+  },
+
+  _clearTreePending(seq) {
+    // A superseded load must not clear the marker of a newer navigation.
+    if (!this._pendingTree || (seq !== undefined && seq !== this._loadSeq)) return;
+    this._pendingTree = null;
+    this._renderFolderTree();
   },
 
   primeSavedNote(note, fresh = false) {
@@ -542,8 +572,14 @@ const App = {
   },
   closeTreeContextMenu() { const m = Utils.$("tree-context-menu"); if (m) m.style.display = "none"; },
 
-  openCategoryByEncoded(e) { this.route({ view: "category", category: decodeURIComponent(e || ""), subcategory: "", note: "", q: "", tag: "", page: 1 }); },
-  openSubcategoryByEncoded(eC, eS) { this.route({ view: "list", category: decodeURIComponent(eC || ""), subcategory: decodeURIComponent(eS || ""), note: "", q: "", tag: "", page: 1 }); },
+  openCategoryByEncoded(e) {
+    const category = decodeURIComponent(e || "");
+    this.route({ view: "category", category, subcategory: "", note: "", q: "", tag: "", page: 1 }, { treeNav: { category, subcategory: "" } });
+  },
+  openSubcategoryByEncoded(eC, eS) {
+    const category = decodeURIComponent(eC || ""), subcategory = decodeURIComponent(eS || "");
+    this.route({ view: "list", category, subcategory, note: "", q: "", tag: "", page: 1 }, { treeNav: { category, subcategory } });
+  },
 
   toggleCategoryFoldByEncoded(e) {
     const c = decodeURIComponent(e || "");
