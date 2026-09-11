@@ -196,6 +196,10 @@ const App = {
     // A page turn keeps the current list and pagination in place so the row of
     // page controls never flickers; only fresh navigations reset content.
     if (!options.quiet && !options.pageTurn) this._resetListContent();
+    // Set here rather than in changePage(): route() bails out when the user
+    // cancels the unsaved-changes dialog, and a page control marked busy at
+    // click time would then be stuck spinning forever.
+    if (options.pageTurn) this._setPaginationBusy(options.dir);
     syncStateFromLocation();
     if (State.view !== "note") this._currentNote = this._notePathHint = null;
 
@@ -248,7 +252,6 @@ const App = {
         await this._loadNoteCollection({
           listId: State.view === "category" ? "category-entry-list" : "entry-list",
           params: { category: State.category, subcategory: State.view === "category" ? "" : State.subcategory, q: State.q, tag: State.tag, page: State.page },
-          options,
           seq
         });
       } else if (State.view === "note") {
@@ -256,27 +259,29 @@ const App = {
       }
       UI.setStatus("");
     } catch (e) {
+      this._clearPaginationBusy();
       if (e?.code === "UNAUTHORIZED") { UI.setStatus(""); return; }
       console.error("View load failed:", e);
       UI.setStatus("err");
     }
   },
 
-  async _loadNoteCollection({ listId, params = {}, options = {}, seq }) {
+  async _loadNoteCollection({ listId, params = {}, seq }) {
     const el = Utils.$(listId);
     if (!el) return;
     const viewEl = el.closest(".view-container");
-    const pg = viewEl?.querySelector("[data-pagination]");
-    // Only blank the pagination on a fresh navigation; a page turn keeps the
-    // existing bar (with its inline spinner) visible until the new HTML lands.
-    if (pg && !options.pageTurn) pg.style.display = "none";
     if (!el.children.length) el.innerHTML = renderLoading();
     try {
       const html = await API.html("list", params);
       if (seq !== undefined && seq !== this._loadSeq) return;
       el.innerHTML = html;
       this._clearPaginationBusy(el);
-      State.data.totalPg = parseInt(viewEl?.querySelector(".pg-data")?.dataset.total, 10) || 1;
+      const pgData = viewEl?.querySelector(".pg-data");
+      State.data.totalPg = parseInt(pgData?.dataset.total, 10) || 1;
+      // The server clamps an out-of-range page; mirror it so prev/next stay in
+      // sync with what the user actually sees.
+      const shownPage = parseInt(pgData?.dataset.page, 10);
+      if (Number.isFinite(shownPage) && shownPage > 0) State.page = shownPage;
     } catch (e) {
       this._clearPaginationBusy(el);
       throw e;
@@ -648,10 +653,7 @@ const App = {
     else {
       txt.style.display = "inline"; inp.style.display = "none";
       const next = parseInt(inp.value, 10);
-      if (next && next !== State.page && next <= State.data.totalPg) {
-        this._setPaginationBusy(next > State.page ? 1 : -1);
-        this.route({ page: next }, { pageTurn: true });
-      }
+      if (next && next !== State.page && next <= State.data.totalPg) this.route({ page: next }, { pageTurn: true, dir: next > State.page ? 1 : -1 });
     }
   },
 
@@ -677,10 +679,9 @@ const App = {
   changePage(dir) {
     const n = State.page + dir;
     if (n < 1 || n > State.data.totalPg) return;
-    // Show feedback right where the user clicked, then navigate quietly so the
-    // global header spinner stays out of the way.
-    this._setPaginationBusy(dir);
-    this.route({ page: n }, { pageTurn: true });
+    // Navigate quietly so the global header spinner stays out of the way; the
+    // inline spinner is applied by loadView() once the navigation is committed.
+    this.route({ page: n }, { pageTurn: true, dir });
   },
 
   _activeViewEl() { return Object.values(this._views).find(v => v?.classList.contains("active")) || null; },
@@ -689,24 +690,18 @@ const App = {
     const pg = this._activeViewEl()?.querySelector("[data-pagination]");
     if (!pg) return;
     pg.classList.add("is-busy");
-    pg.setAttribute("aria-busy", "true");
     const btns = pg.querySelectorAll(".pg-btn");
     (dir > 0 ? btns[1] : btns[0])?.classList.add("is-loading");
     const listEl = pg.parentElement;
-    if (listEl) {
-      listEl.classList.add("is-updating");
-      listEl.setAttribute("aria-busy", "true");
-    }
+    if (listEl) listEl.classList.add("is-updating");
   },
 
-  _clearPaginationBusy(listEl) {
+  _clearPaginationBusy(listEl = this._activeViewEl()?.querySelector("[data-pagination]")?.parentElement) {
     if (!listEl) return;
     listEl.classList.remove("is-updating");
-    listEl.removeAttribute("aria-busy");
     const pg = listEl.querySelector("[data-pagination]");
     if (!pg) return;
     pg.classList.remove("is-busy");
-    pg.removeAttribute("aria-busy");
     pg.querySelectorAll(".pg-btn.is-loading").forEach(btn => btn.classList.remove("is-loading"));
   },
 

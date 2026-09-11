@@ -48,26 +48,23 @@ export function renderArchiveList(notes) {
 
 export function renderPagination(currPg, totalPg) {
   const safeTotal = Math.max(1, totalPg);
+  const safeCurr = Math.min(Math.max(1, currPg), safeTotal);
   const pgStyle = safeTotal > 1 ? 'flex' : 'none';
+  const prevCls = safeCurr <= 1 ? ' is-disabled' : '';
+  const nextCls = safeCurr >= safeTotal ? ' is-disabled' : '';
   return `
     <div class="pg-box" data-pagination style="display:${pgStyle}">
-      <span class="pg-btn" role="button" tabindex="0" aria-label="Previous page" title="Previous page"
-        onclick="App.changePage(-1)"
-        onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();App.changePage(-1)}"><i class="ri-arrow-left-s-line"></i><span class="pg-spin" aria-hidden="true"></span></span>
+      <span class="pg-btn${prevCls}" onclick="App.changePage(-1)"><i class="ri-arrow-left-s-line"></i><span class="pg-spin"></span></span>
       <div class="pg-status">
-        <span class="pg-status-txt" role="button" tabindex="0" aria-label="Jump to page" title="Click to jump to a page"
-          onclick="App.toggleJump(true)"
-          onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();App.toggleJump(true)}">${currPg}</span>
+        <span class="pg-status-txt" onclick="App.toggleJump(true)">${safeCurr}</span>
         <input type="number" class="pg-inp" style="display:none"
-          value="${currPg}"
+          value="${safeCurr}"
           onblur="App.toggleJump(false)"
           onkeydown="if(event.key==='Enter')this.blur()">
         <span>/ <span class="pg-total">${safeTotal}</span></span>
       </div>
-      <span class="pg-btn" role="button" tabindex="0" aria-label="Next page" title="Next page"
-        onclick="App.changePage(1)"
-        onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();App.changePage(1)}"><i class="ri-arrow-right-s-line"></i><span class="pg-spin" aria-hidden="true"></span></span>
-      <div class="pg-data" data-total="${safeTotal}" style="display:none"></div>
+      <span class="pg-btn${nextCls}" onclick="App.changePage(1)"><i class="ri-arrow-right-s-line"></i><span class="pg-spin"></span></span>
+      <div class="pg-data" data-total="${safeTotal}" data-page="${safeCurr}" style="display:none"></div>
     </div>
   `;
 }

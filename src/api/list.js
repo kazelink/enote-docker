@@ -101,26 +101,29 @@ router.get('/', authMiddleware, async (c) => {
   }
 
   const limit = V.safeInt(size, 10, 1, 50);
-  const safePage = V.safeInt(page, 1, 1, 9999);
-  const offset = (safePage - 1) * limit;
+  const requestedPage = V.safeInt(page, 1, 1, 9999);
   const { conditions, params, hasFolderScope } = buildQuery(category, subcategory, q, tag);
   const whereClause = conditions.length ? ` WHERE ${conditions.join(' AND ')}` : '';
 
-  const listStmt = db.prepare(
+  const totalRow = await db.prepare(
+    `SELECT COUNT(*) AS total
+     FROM notes n${whereClause}`
+  ).bind(...params).first();
+  const total = Number(totalRow?.total ?? 0);
+  const totalPg = Math.max(1, Math.ceil(total / limit));
+
+  // A stale URL can point past the end (last note on the final page deleted, or
+  // an old bookmark). Clamp to the last real page so the list never renders as
+  // empty while notes actually exist.
+  const safePage = Math.min(requestedPage, totalPg);
+
+  const listRes = await db.prepare(
     `SELECT id, title, category, subcategory, tags, created_at, updated_at
      FROM notes n${whereClause}
      ORDER BY n.title COLLATE NOCASE ASC, n.updated_at DESC, n.created_at DESC
      LIMIT ? OFFSET ?`
-  ).bind(...params, limit, offset);
-
-  const totalStmt = db.prepare(
-    `SELECT COUNT(*) AS total
-     FROM notes n${whereClause}`
-  ).bind(...params);
-
-  const [listRes, totalRes] = await db.batch([listStmt, totalStmt]);
+  ).bind(...params, limit, (safePage - 1) * limit).all();
   const list = (listRes.results ?? []).map(toClientNote);
-  const total = Number(totalRes.results?.[0]?.total ?? 0);
 
   if (c.req.header('HX-Request')) {
     const hasAnyFilter = !!String(q || '').trim() || !!String(tag || '').trim();
@@ -128,7 +131,6 @@ router.get('/', authMiddleware, async (c) => {
       ? renderArchiveList(list)
       : `<div class="loading-hint">${renderArchiveEmptyState({ hasFolderScope, hasAnyFilter })}</div>`;
 
-    const totalPg = Math.max(1, Math.ceil(total / limit));
     return c.html(`${html}${renderPagination(safePage, totalPg)}`);
   }
 
