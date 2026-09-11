@@ -121,7 +121,7 @@ async function withLoading(fn, errorTitle = null, errorFallback = "Operation fai
 const COLLAPSE_STORAGE_KEY = "enote_collapsed_categories";
 
 const App = {
-  _views: {}, _popstateHandler: null, _restoreInFlight: false, _searchPanelOpen: false, _folderTreeCache: null, _tagCloudCache: null, _tagCloudExpanded: false, _tagCloudPanelCollapsed: true, _collapsedCategories: new Set(), _collapsedStateLoaded: false, _folderPanelCollapsed: false, _currentNote: null, _currentNoteFresh: false, _notePathHint: null, _treeContextState: { scope: "root", category: "" }, _lastFolderTreeHtml: null, _lastTagCloudHtml: null, _loadSeq: 0, _pendingTree: null,
+  _views: {}, _popstateHandler: null, _restoreInFlight: false, _searchPanelOpen: false, _folderTreeCache: null, _tagCloudCache: null, _tagCloudExpanded: false, _tagCloudPanelCollapsed: true, _collapsedCategories: new Set(), _collapsedStateLoaded: false, _folderPanelCollapsed: false, _currentNote: null, _currentNoteFresh: false, _notePathHint: null, _treeContextState: { scope: "root", category: "" }, _lastFolderTreeHtml: null, _lastTagCloudHtml: null, _loadSeq: 0, _pendingTree: null, _pendingNav: null,
 
   _resetListContent() {
     ["home-entry-list", "category-entry-list", "entry-list"].forEach(id => {
@@ -198,6 +198,9 @@ const App = {
     // A page turn keeps the current list and pagination in place so the row of
     // page controls never flickers; only fresh navigations reset content.
     if (!options.quiet && !options.pageTurn) this._resetListContent();
+    // In-place navigations (page turn, tree, tag, breadcrumb, back) all report
+    // progress next to the control that was used, so the header spinner stays out.
+    const inPlaceNav = !!(options.pageTurn || options.treeNav || options.navPending);
     // Set here rather than in changePage(): route() bails out when the user
     // cancels the unsaved-changes dialog, and a page control marked busy at
     // click time would then be stuck spinning forever.
@@ -205,6 +208,7 @@ const App = {
     // Same idea for tree navigation: the click handler only passes the target,
     // and the pending marker is applied once the navigation is committed.
     if (options.treeNav) this._pendingTree = options.treeNav;
+    if (options.navPending) this._pendingNav = options.navPending;
     syncStateFromLocation();
     if (State.view !== "note") this._currentNote = this._notePathHint = null;
 
@@ -212,7 +216,11 @@ const App = {
     UI.renderBreadcrumb(this._breadcrumbContext());
 
     const backBtn = Utils.$("btn-header-back");
-    if (backBtn) { backBtn.classList.toggle("visible", State.view !== "index"); backBtn.disabled = State.view === "index"; }
+    if (backBtn) {
+      backBtn.classList.toggle("visible", State.view !== "index");
+      backBtn.disabled = State.view === "index";
+      backBtn.classList.toggle("is-loading", this._pendingNav?.kind === "back");
+    }
 
     const input = Utils.$("note-search");
     if (input) input.value = State.q || "";
@@ -237,6 +245,7 @@ const App = {
     if (State.view === "backup") {
       // This branch returns before the block that clears transient loading state.
       this._clearTreePending(seq);
+      this._clearNavPending(seq);
       try {
         await this._loadFolderTree();
       } catch (e) {
@@ -244,7 +253,7 @@ const App = {
       }
       return;
     }
-    if (!options.quiet && !options.pageTurn && !options.treeNav) UI.setStatus("loading");
+    if (!options.quiet && !inPlaceNav) UI.setStatus("loading");
 
     try {
       await Promise.all([
@@ -266,9 +275,11 @@ const App = {
       }
       UI.setStatus("");
       this._clearTreePending(seq);
+      this._clearNavPending(seq);
     } catch (e) {
       this._clearPaginationBusy();
       this._clearTreePending(seq);
+      this._clearNavPending(seq);
       if (e?.code === "UNAUTHORIZED") { UI.setStatus(""); return; }
       console.error("View load failed:", e);
       UI.setStatus("err");
@@ -345,10 +356,12 @@ const App = {
       }
     }
 
+    const pendTag = this._pendingNav?.kind === "tag" ? this._pendingNav.key : null;
     const chipsHtml = visibleRows.map(r => {
       const tag = String(r?.tag || "").trim();
       const enc = encodeInlineParam(tag);
-      return tag ? `<button class="tag-cloud-chip${activeTag === tag ? " active" : ""}" type="button" onclick="App.openSidebarTagByEncoded('${enc}')" oncontextmenu="return App.openTreeContextMenu(event, 'tag', '', '', '${enc}')">#${escapeHtml(tag)}</button>` : "";
+      const isPend = !!tag && tag === pendTag;
+      return tag ? `<button class="tag-cloud-chip${activeTag === tag ? " active" : ""}${isPend ? " is-loading" : ""}" type="button" onclick="App.openSidebarTagByEncoded('${enc}')" oncontextmenu="return App.openTreeContextMenu(event, 'tag', '', '', '${enc}')">${isPend ? '<span class="tag-chip-spin"></span>' : "#"}${escapeHtml(tag)}</button>` : "";
     }).join("");
 
     const footerMarkup = hasOverflow ? `<div class="tag-cloud-footer"><button class="tag-cloud-more${this._tagCloudExpanded ? " is-expanded" : ""}" type="button" aria-label="${this._tagCloudExpanded ? "Show fewer tags" : "Show more tags"}" onclick="App.toggleTagCloudExpanded()"><i class="ri-arrow-right-s-line"></i></button></div>` : "";
@@ -468,6 +481,19 @@ const App = {
     this._renderFolderTree();
   },
 
+  // Tag chips, breadcrumbs and the back button all report their own progress, so
+  // clearing means refreshing whichever of those surfaces is on screen.
+  _clearNavPending(seq) {
+    const pending = this._pendingNav;
+    if (!pending || (seq !== undefined && seq !== this._loadSeq)) return;
+    this._pendingNav = null;
+    // Clear only the surface that was actually marked, so a failed tag-cloud
+    // fetch is never mistaken for an empty tag list.
+    if (pending.kind === "tag") { if (this._tagCloudCache) this._renderTagCloud(); }
+    else if (pending.kind === "crumb") UI.renderBreadcrumb(this._breadcrumbContext());
+    else if (pending.kind === "back") Utils.$("btn-header-back")?.classList.remove("is-loading");
+  },
+
   primeSavedNote(note, fresh = false) {
     if (!note?.id) return null;
     this._currentNote = { ...note, id: String(note.id || ""), title: String(note.title || ""), category: String(note.category || ""), subcategory: String(note.subcategory || ""), content: typeof note.content === "string" ? note.content : "", tags: Array.isArray(note.tags) ? note.tags.map(t => String(t || "").trim()).filter(Boolean) : [] };
@@ -485,7 +511,8 @@ const App = {
       tag: State.tag,
       currentNote: this._currentNote,
       notePathHint: this._notePathHint,
-      onNavigate: (next) => this.route(next)
+      pendingKey: this._pendingNav?.kind === "crumb" ? this._pendingNav.key : null,
+      onNavigate: (next) => this.route(next, { navPending: { kind: "crumb", key: next.view } })
     };
   },
 
@@ -654,12 +681,14 @@ const App = {
   deleteSubcategoryByEncoded(eC, eS) { const c = decodeURIComponent(eC || ""), s = decodeURIComponent(eS || ""); if (c && s) this._deleteFolder({ category: c, subcategory: s }, s, false, State.category === c && State.subcategory === s ? { view: "category", category: c, subcategory: "", note: "", q: "", tag: "", page: 1 } : null); },
 
   toggleTagByEncoded(e) {
-    const tag = decodeURIComponent(e || ""); this._searchPanelOpen = false;
-    this.route({ note: "", tag: State.tag === tag ? "" : tag, page: 1 });
+    const tag = decodeURIComponent(e || ""), next = State.tag === tag ? "" : tag;
+    this._searchPanelOpen = false;
+    this.route({ note: "", tag: next, page: 1 }, { navPending: { kind: "tag", key: next } });
   },
   openSidebarTagByEncoded(e) {
-    const t = decodeURIComponent(e || ""), n = State.tag === t ? "" : t; this._searchPanelOpen = false;
-    this.route({ category: "", subcategory: "", note: "", q: "", tag: n, page: 1 });
+    const t = decodeURIComponent(e || ""), n = State.tag === t ? "" : t;
+    this._searchPanelOpen = false;
+    this.route({ category: "", subcategory: "", note: "", q: "", tag: n, page: 1 }, { navPending: { kind: "tag", key: n } });
   },
   applySearch() {
     const q = String(Utils.$("note-search")?.value || "").trim();
@@ -742,9 +771,10 @@ const App = {
   },
 
   async goBack() {
-    if (State.view === "note") this.route({ note: "" });
-    else if (State.view === "list" && State.category && State.subcategory) this.route({ subcategory: "", page: 1 });
-    else this.route({ view: "index", category: "", subcategory: "", note: "", q: "", tag: "", page: 1 });
+    const back = { navPending: { kind: "back" } };
+    if (State.view === "note") this.route({ note: "" }, back);
+    else if (State.view === "list" && State.category && State.subcategory) this.route({ subcategory: "", page: 1 }, back);
+    else this.route({ view: "index", category: "", subcategory: "", note: "", q: "", tag: "", page: 1 }, back);
   },
   closeEditor: () => Editor.close(),
   pickRestoreFile() { const i = getRestoreInput(); if (i) { try { if (typeof i.showPicker === "function") i.showPicker(); else i.click(); } catch { i.click(); } } },

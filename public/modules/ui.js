@@ -51,13 +51,19 @@ function handleMediaClick(target, container) {
     }
 }
 
-function appendCrumb(container, label, onClick) {
+function appendCrumb(container, label, onClick, isPending = false) {
     const crumb = document.createElement('span');
     crumb.className = 'breadcrumb-item';
     crumb.textContent = label;
     if (onClick) {
         crumb.classList.add('clickable');
         crumb.addEventListener('click', onClick);
+    }
+    if (isPending) {
+        crumb.classList.add('is-loading');
+        const spin = document.createElement('span');
+        spin.className = 'crumb-spin';
+        crumb.appendChild(spin);
     }
     container.appendChild(crumb);
 }
@@ -78,7 +84,7 @@ export const UI = {
         statusEl.innerHTML = STATUS_ICONS[mode] || '';
     },
 
-    renderBreadcrumb({ view, category, subcategory, q, tag, currentNote = null, notePathHint = null, onNavigate = null }) {
+    renderBreadcrumb({ view, category, subcategory, q, tag, currentNote = null, notePathHint = null, onNavigate = null, pendingKey = null }) {
         const titleEl = Utils.$('c-title-box');
         if (!titleEl) return;
         const navigate = onNavigate || (() => {});
@@ -104,7 +110,7 @@ export const UI = {
                 q: '',
                 tag: '',
                 page: 1
-            }));
+            }), pendingKey === 'index');
             return;
         }
 
@@ -124,7 +130,7 @@ export const UI = {
                     tag: '',
                     page: 1
                 })
-                : null);
+                : null, pendingKey === 'category');
         }
 
         if (noteSubcategory) {
@@ -139,7 +145,7 @@ export const UI = {
                     tag: '',
                     page: 1
                 })
-                : null);
+                : null, pendingKey === 'list');
         }
     },
 

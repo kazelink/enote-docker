@@ -402,6 +402,25 @@ body.ready {
     color: var(--m-blu);
 }
 
+/* The crumb you clicked reports its own progress (same idea as the page-turn
+   arrow), so the breadcrumb never blanks out mid-navigation. */
+.breadcrumb-item.is-loading {
+    color: var(--m-blu);
+    pointer-events: none;
+}
+
+.crumb-spin {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    margin-left: 6px;
+    vertical-align: -1px;
+    border-radius: 50%;
+    border: 2px solid rgba(var(--m-blu-rgb), 0.25);
+    border-top-color: var(--m-blu);
+    animation: spin 0.7s linear infinite;
+}
+
 .breadcrumb-divider {
     color: var(--txt-mut);
     margin: 0 8px;
@@ -719,6 +738,25 @@ body>.partial-view {
 
 .btn-back-head .ri-icon {
     stroke-width: 0;
+}
+
+/* Swap the back arrow for a spinner while that navigation is in flight. */
+#btn-header-back.is-loading {
+    pointer-events: none;
+}
+
+#btn-header-back.is-loading svg {
+    display: none;
+}
+
+#btn-header-back.is-loading::after {
+    content: "";
+    width: 13px;
+    height: 13px;
+    border-radius: 50%;
+    border: 2px solid rgba(var(--m-blu-rgb), 0.25);
+    border-top-color: var(--m-blu);
+    animation: spin 0.7s linear infinite;
 }
 
 input[type=number]::-webkit-inner-spin-button,
@@ -2185,6 +2223,25 @@ input[type=number] {
     background: rgba(var(--m-blu-rgb), 0.14);
     border-color: rgba(var(--m-blu-rgb), 0.22);
     color: var(--m-blu);
+}
+
+/* The tag you clicked replaces its "#" with a spinner while its list loads. */
+.tag-cloud-chip.is-loading {
+    pointer-events: none;
+    background: rgba(var(--m-blu-rgb), 0.08);
+    border-color: rgba(var(--m-blu-rgb), 0.16);
+    color: var(--m-blu);
+}
+
+.tag-chip-spin {
+    flex-shrink: 0;
+    width: 9px;
+    height: 9px;
+    margin-right: 3px;
+    border-radius: 50%;
+    border: 2px solid rgba(var(--m-blu-rgb), 0.25);
+    border-top-color: var(--m-blu);
+    animation: spin 0.7s linear infinite;
 }
 
 .workspace-empty {
